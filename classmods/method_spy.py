@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Tuple, Type, Callable
 from functools import wraps
 
-HandlerCallable = Callable[[object], None]
+HandlerCallable = Callable[[object, Any], None]
 
 class MethodSpy:
     # Dictionary to store spies for each (class, method) pair
@@ -59,8 +59,8 @@ class MethodSpy:
 
             key = self._create_registery_key()
             for spy in MethodSpy.spies_registery.get(key, []):
-                if spy._active:
-                    spy._spy_callable(instance, *spy._spy_args, **spy._spy_kwargs)  # Fixed argument passing
+                if spy._is_active():
+                    spy._spy_callable(instance, *spy._spy_args, **spy._spy_kwargs)
 
             return output
 
@@ -88,8 +88,12 @@ class MethodSpy:
 
                 del self.spies_registery[key]
 
-    def __bool__(self) -> bool:
+
+    def _is_active(self) -> bool:
         return bool(self._active)
+
+    def __bool__(self) -> bool:
+        return self._is_active()
 
     def __str__(self) -> str:
         return f'<MethodSpy of: {self._target} (method={self._target_method})>'
