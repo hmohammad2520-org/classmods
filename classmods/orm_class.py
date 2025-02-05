@@ -5,35 +5,29 @@ from typing import Any, Optional, Callable, Type
 class ORMClass:
     def __init__(self) -> None:
         self._attribute_cache: dict[str, tuple[Any, float]] = {}
-        self._sensitive_store: dict[str, Any] = {}  # Separate storage for sensitive attributes
 
 
 class ORMDescriptorType:
     def __init__(
             self,
-            raw_class: Type | tuple[Type],
+            raw_class: Type,
             constructor: Type | Callable[[Any], Any] = None,
     ) -> None:
         self.raw_class = raw_class
         self.constructor = constructor
 
     def to_python(self, value: Any) -> Any:
-        if self.constructor:
+        if self.constructor is not None:
             return self.constructor(value)
+
         elif isinstance(value, self.raw_class):
             return value
-        elif isinstance(self.raw_class, tuple):
-            for cls in self.raw_class:
-                try:
-                    return cls(value)
-                except (ValueError, TypeError):
-                    pass
-            raise TypeError(f"Cannot convert {value} to any of {self.raw_class}")
+
         else:
             return self.raw_class(value)
 
     def validate(self, value: Any) -> bool:
-        return isinstance(value, self.raw_class) if isinstance(self.raw_class, type) else any(isinstance(value, cls) for cls in self.raw_class)
+        return isinstance(value, self.raw_class)
 
     @property
     def expected_type(self) -> Type:
@@ -79,7 +73,7 @@ class ORMDescriptor:
             return self
 
         if self.sensitive:
-            raise AttributeError(f"Access to {self.name} is restricted.")  # Prevent access
+            raise AttributeError(f"Access to {self.name} is restricted. Data marked as sensetive")  # Prevent access
 
         cache_entry = instance._attribute_cache.get(self.name)
         if cache_entry and (time.time() - cache_entry[1] <= self.cache_timeout):
@@ -105,6 +99,7 @@ class ORMDescriptor:
                 raise AttributeError(f"{self.name} is not nullable.")
             if self.remover:
                 self.remover(instance, value)
+
         else:
             if not self.type.validate(value):
                 raise ValueError(f"Invalid value type for {self.name}: {value.__class__} -> expected: {self.type.raw_class}")
