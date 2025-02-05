@@ -97,3 +97,6 @@ class MethodSpy:
 
     def __repr__(self) -> str:
         return f'MethodSpy({self._target}, {self._spy_callable}, active={self._active}, target_method={self._target_method}, handler_args={self._spy_args}, handler_kwargs={self._spy_args})'
+
+    def __delete__(self) -> None:
+        self.remove()
