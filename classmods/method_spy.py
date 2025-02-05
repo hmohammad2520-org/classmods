@@ -17,11 +17,13 @@ class MethodSpy:
             target_method: str = '__init__',
             active: bool = True,
     ) -> None:
-
+        """
+            Method Spy
+        """
         self._target = target
         self._spy_callable = spy_callable
         self._spy_args = spy_args
-        self._spy_args = spy_kwargs
+        self._spy_kwargs = spy_kwargs
         self._target_method = target_method
         self._active = active
 
@@ -43,30 +45,25 @@ class MethodSpy:
         """Wrap the target method to call all Spies."""
         original_name = self._create_original_name(method_name)
 
-        # Check if the target method exists
         if not hasattr(target, method_name):
-            raise AttributeError(f'Target must contain {method_name} method.')
+            raise ValueError(f"The target class {target.__name__} does not have a method '{method_name}'.")
 
         # Save the original method if not already saved
         if not hasattr(target, original_name):
             setattr(target, original_name, getattr(target, method_name))
 
-        # Define the new method
         @wraps(getattr(target, original_name))
         def new_method(instance: Any, *args, **kwargs) -> Any:
-            # Call the original method
             original_method: Callable = getattr(instance, original_name)
             output = original_method(*args, **kwargs)
 
-            # Call all active spies for this (class, method)
             key = self._create_registery_key()
-            for handler in MethodSpy.spies_registery.get(key, []):
-                if handler._active:
-                    handler._spy_callable(instance, *self._spy_args, **self._spy_args)
+            for spy in MethodSpy.spies_registery.get(key, []):
+                if spy._active:
+                    spy._spy_callable(instance, *spy._spy_args, **spy._spy_kwargs)  # Fixed argument passing
 
             return output
 
-        # Replace the target method with the new one
         setattr(target, method_name, new_method)
 
     def activate(self) -> None:
@@ -91,7 +88,6 @@ class MethodSpy:
 
                 del self.spies_registery[key]
 
-
     def __bool__(self) -> bool:
         return bool(self._active)
 
@@ -99,7 +95,7 @@ class MethodSpy:
         return f'<MethodSpy of: {self._target} (method={self._target_method})>'
 
     def __repr__(self) -> str:
-        return f'MethodSpy({self._target}, {self._spy_callable}, active={self._active}, target_method={self._target_method}, handler_args={self._spy_args}, handler_kwargs={self._spy_args})'
+        return f'MethodSpy({self._target}, {self._spy_callable}, active={self._active}, target_method={self._target_method}, spy_args={self._spy_args}, spy_kwargs={self._spy_kwargs})'
 
     def __delete__(self) -> None:
         self.remove()
