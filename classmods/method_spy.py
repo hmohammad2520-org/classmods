@@ -4,7 +4,7 @@ from functools import wraps
 HandlerCallable = Callable[[object], None]
 
 class MethodSpy:
-    # Dictionary to store handlers for each (class, method) pair
+    # Dictionary to store spies for each (class, method) pair
     spies_registery: Dict[Tuple[Type, str], List['MethodSpy']] = {}
 
     def __init__(
