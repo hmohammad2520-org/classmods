@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "classmods"
+version = "0.0.1"
+description = "Simple mods for python classes."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Radin-System", email = "technical@rsto.ir" }
+]
+keywords = ["python", "class", "mods", "modification", "descriptors", "methods", "methodmod", "methodobserve"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+requires-python = ">=3.9"
+
+[project.urls]
+Homepage = "https://github.com/Radin-System/classmods"
+BugTracker = "https://github.com/Radin-System/classmods/issues"
