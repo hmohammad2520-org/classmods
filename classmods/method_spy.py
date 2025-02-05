@@ -1,46 +1,46 @@
-from typing import Any, Dict, List, Iterable, Tuple, Type, Callable, Union
+from typing import Any, Dict, List, Tuple, Type, Callable
 from functools import wraps
 
 HandlerCallable = Callable[[object], None]
 
 class MethodSpy:
     # Dictionary to store handlers for each (class, method) pair
-    class_method_handlers: Dict[Tuple[Type, str], List['MethodSpy']] = {}
+    spies_registery: Dict[Tuple[Type, str], List['MethodSpy']] = {}
 
     def __init__(
             self, 
-            targets: Union[Type, Iterable[Type]], 
-            handler_function: HandlerCallable,
-            handler_args: tuple = (),
-            handler_kwargs: dict = {},
+            target: Type, 
+            spy_callable: HandlerCallable,
+            spy_args: tuple = (),
+            spy_kwargs: dict = {},
             *,
             target_method: str = '__init__',
             active: bool = True,
     ) -> None:
-        # Ensure targets is always a list
-        if not isinstance(targets, (list, tuple)):
-            targets = [targets]
 
-        self._targets = list(targets)
-        self._handler_function = handler_function
-        self._handler_args = handler_args
-        self._handler_kwargs = handler_kwargs
+        self._target = target
+        self._spy_callable = spy_callable
+        self._spy_args = spy_args
+        self._spy_args = spy_kwargs
         self._target_method = target_method
         self._active = active
 
-        # Add this handler to the list of handlers for each (class, method)
-        for target in self._targets:
-            key = (target, self._target_method)
-            if key not in self.class_method_handlers:
-                self.class_method_handlers[key] = []
-                self._wrap_class_method(target, self._target_method)
-            self.class_method_handlers[key].append(self)
+        # Add this Spy to the list of Spies for each (class, method)
+        key = self._create_registery_key()
+        if key not in self.spies_registery:
+            self.spies_registery[key] = []
+            self._wrap_class_method(target, self._target_method)
+
+        self.spies_registery[key].append(self)
+
+    def _create_registery_key(self) -> Tuple[Type, str]:
+        return (self._target, self._target_method)
 
     def _create_original_name(self, method_name: str) -> str:
         return f'__original_{method_name}'
 
     def _wrap_class_method(self, target: Type, method_name: str) -> None:
-        """Wrap the target method to call all handlers."""
+        """Wrap the target method to call all Spies."""
         original_name = self._create_original_name(method_name)
 
         # Check if the target method exists
@@ -55,14 +55,14 @@ class MethodSpy:
         @wraps(getattr(target, original_name))
         def new_method(instance: Any, *args, **kwargs) -> Any:
             # Call the original method
-            original_method = getattr(instance, original_name)
+            original_method: Callable = getattr(instance, original_name)
             output = original_method(*args, **kwargs)
 
-            # Call all active handlers for this (class, method)
-            key = (target, method_name)
-            for handler in MethodSpy.class_method_handlers.get(key, []):
+            # Call all active spies for this (class, method)
+            key = self._create_registery_key()
+            for handler in MethodSpy.spies_registery.get(key, []):
                 if handler._active:
-                    handler._handler_function(instance, *self._handler_args, **self._handler_kwargs)
+                    handler._spy_callable(instance, *self._spy_args, **self._spy_args)
 
             return output
 
@@ -70,30 +70,30 @@ class MethodSpy:
         setattr(target, method_name, new_method)
 
     def activate(self) -> None:
-        """Activate the handler."""
+        """Activate the spy."""
         self._active = True
 
     def deactivate(self) -> None:
-        """Deactivate the handler."""
+        """Deactivate the spy."""
         self._active = False
 
     def remove(self) -> None:
-        """Remove the handler and restore the original method if no handlers are left."""
-        for target in self._targets:
-            key = (target, self._target_method)
-            if key in self.class_method_handlers:
-                self.class_method_handlers[key].remove(self)
-                if not self.class_method_handlers[key]:  # No handlers left
-                    # Restore the original method
-                    original_name = self._create_original_name(self._target_method)
-                    if hasattr(target, original_name):
-                        setattr(target, self._target_method, getattr(target, original_name))
-                        delattr(target, original_name)
-                    del self.class_method_handlers[key]
+        """Remove the handler and restore the original method if no spies are left."""
+        key = self._create_registery_key()
+        if key in self.spies_registery:
+            self.spies_registery[key].remove(self)
+            if not self.spies_registery[key]:
+                # Restore the original method
+                original_name = self._create_original_name(self._target_method)
+                if hasattr(self._target, original_name):
+                    setattr(self._target, self._target_method, getattr(self._target, original_name))
+                    delattr(self._target, original_name)
+
+                del self.spies_registery[key]
 
 
     def __str__(self) -> str:
-        return f'<Handler of: {self._targets} (method={self._target_method})>'
+        return f'<MethodSpy of: {self._target} (method={self._target_method})>'
 
     def __repr__(self) -> str:
-        return f'Handler({self._targets}, {self._handler_function}, active={self._active}, target_method={self._target_method}, handler_args={self._handler_args}, handler_kwargs={self._handler_kwargs})'
+        return f'MethodSpy({self._target}, {self._spy_callable}, active={self._active}, target_method={self._target_method}, handler_args={self._spy_args}, handler_kwargs={self._spy_args})'
