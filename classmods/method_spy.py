@@ -99,7 +99,7 @@ class MethodSpy:
         return f'<MethodSpy of: {self._target} (method={self._target_method})>'
 
     def __repr__(self) -> str:
-        return f'MethodSpy({self._target}, {self._spy_callable}, active={self._active}, target_method={self._target_method}, spy_args={self._spy_args}, spy_kwargs={self._spy_kwargs})'
+        return f'MethodSpy({self._target}, {self._spy_callable}, target_method={self._target_method}, spy_args={self._spy_args}, spy_kwargs={self._spy_kwargs})'
 
-    def __delete__(self) -> None:
+    def __del__(self) -> None:
         self.remove()
