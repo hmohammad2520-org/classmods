@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Tuple, Type, Callable
 from functools import wraps
 
-HandlerCallable = Callable[[object, Any], None]
+SpyCallable = Callable[..., None]
 
 class MethodSpy:
     # Dictionary to store spies for each (class, method) pair
@@ -10,7 +10,7 @@ class MethodSpy:
     def __init__(
             self, 
             target: Type, 
-            spy_callable: HandlerCallable,
+            spy_callable: SpyCallable,
             spy_args: tuple = (),
             spy_kwargs: dict = {},
             *,
@@ -18,8 +18,32 @@ class MethodSpy:
             active: bool = True,
     ) -> None:
         """
-            Method Spy
+        A class to spy on method calls of a target class, triggering a handler function after the method is called.
+
+        The MethodSpy wraps a target method of a class and executes a spy handler whenever the method is invoked.
+        Multiple spies can be registered for the same (class, method) pair, and all active spies will be triggered
+        sequentially after the original method call.
+
+        Args:
+            target (Type): The target class whose method will be spied on.
+            spy_callable (SpyCallable): A callable to execute when the target method is called.
+                Signature: spy_callable(instance: object, *spy_args, **spy_kwargs).
+            spy_args (tuple): Positional arguments to pass to `spy_callable` (default: empty tuple).
+            spy_kwargs (dict): Keyword arguments to pass to `spy_callable` (default: empty dict).
+            target_method (str): Name of the method to spy on (default: '__init__').
+            active (bool): Whether the spy is active initially (default: True).
+
+        Example:
+            >>> class MyClass:
+            ...     def my_method(self):
+            ...         pass
+            >>> def my_handler(instance):
+            ...     print(f"Spy triggered on {instance}")
+            >>> spy = MethodSpy(MyClass, my_handler, target_method='my_method')
+            >>> obj = MyClass()
+            >>> obj.my_method()  # Calls my_handler(obj)
         """
+
         self._target = target
         self._spy_callable = spy_callable
         self._spy_args = spy_args
@@ -35,11 +59,13 @@ class MethodSpy:
 
         self.spies_registery[key].append(self)
 
+
     def _create_registery_key(self) -> Tuple[Type, str]:
         return (self._target, self._target_method)
 
     def _create_original_name(self, method_name: str) -> str:
         return f'__original_{method_name}'
+
 
     def _wrap_class_method(self, target: Type, method_name: str) -> None:
         """Wrap the target method to call all Spies."""
@@ -65,6 +91,7 @@ class MethodSpy:
             return output
 
         setattr(target, method_name, new_method)
+
 
     def activate(self) -> None:
         """Activate the spy."""
