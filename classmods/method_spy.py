@@ -92,6 +92,9 @@ class MethodSpy:
                 del self.spies_registery[key]
 
 
+    def __bool__(self) -> bool:
+        return bool(self._active)
+
     def __str__(self) -> str:
         return f'<MethodSpy of: {self._target} (method={self._target_method})>'
 
