@@ -1,9 +1,17 @@
+# Live Attrib
+from .live_attrib import (
+    LiveAttribMixin, 
+    LiveAttrib, 
+    LiveAttribType
+    )
+
+# Method_Spy
 from .method_spy import MethodSpy
-from .orm_class import ORMClass, ORMDescriptor, ORMDescriptorType
+
 
 __all__ = [
+    'LiveAttribMixin',
+    'LiveAttrib',
+    'LiveAttribType',
     'MethodSpy',
-    'ORMClass',
-    'ORMDescriptor',
-    'ORMDescriptorType',
 ]

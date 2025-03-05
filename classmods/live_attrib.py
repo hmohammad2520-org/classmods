@@ -2,12 +2,12 @@ import time
 from typing import Any, Optional, Callable, Type
 
 
-class ORMClass:
+class LiveAttribMixin:
     def __init__(self) -> None:
         self._attribute_cache: dict[str, tuple[Any, float]] = {}
 
 
-class ORMDescriptorType:
+class LiveAttribType:
     def __init__(
             self,
             raw_class: Type,
@@ -35,20 +35,21 @@ class ORMDescriptorType:
         return self._raw_class
 
 
-class ORMDescriptor:
+class LiveAttrib:
     def __init__(
             self,
-            type: ORMDescriptorType,
-            getter: Optional[Callable[[ORMClass], Any]] = None,
-            setter: Optional[Callable[[ORMClass, str], None]] = None,
-            remover: Optional[Callable[[ORMClass, str], None]] = None,
+            type: LiveAttribType,
+            getter: Optional[Callable[[LiveAttribMixin], Any]] = None,
+            setter: Optional[Callable[[LiveAttribMixin, str], None]] = None,
+            remover: Optional[Callable[[LiveAttribMixin, str], None]] = None,
             *,
             validator: Optional[Callable[[str], bool]] = None,
             cache_timeout: int = 0,
+            sensitive: bool = False,
             changeable: bool = False,
             nullable: bool = False,
-            sensitive: bool = False,
     ) -> None:
+
         if setter is None and changeable:
             raise ValueError('Setter cannot be `None` when changeable is `True`.')
 
@@ -61,20 +62,20 @@ class ORMDescriptor:
         self._remover = remover
         self._validator = validator
         self._cache_timeout = cache_timeout
+        self._sensitive = sensitive
         self._changeable = changeable
         self._nullable = nullable
-        self._sensitive = sensitive
-        self._name = ""
+        self._name = "" # Initiated in __set_name__
 
     def __set_name__(self, owner, name: str) -> None:
         self._name = name
 
-    def __get__(self, instance: Optional[ORMClass], _) -> Any:
+    def __get__(self, instance: Optional[LiveAttribMixin], _) -> Any:
         if instance is None:
             return self
 
         if self._sensitive:
-            raise AttributeError(f"Access to {self._name} is restricted. Data marked as sensetive")  # Prevent access
+            raise PermissionError(f"Access to {self._name} is restricted. Data marked as sensetive.")
 
         cache_entry = instance._attribute_cache.get(self._name)
         if cache_entry and (time.time() - cache_entry[1] <= self._cache_timeout):
@@ -91,7 +92,7 @@ class ORMDescriptor:
 
         return value
 
-    def __set__(self, instance: ORMClass, value: Any) -> None:
+    def __set__(self, instance: LiveAttribMixin, value: Any) -> None:
         if not self._changeable:
             raise AttributeError(f"{self._name} is read-only.")
 
@@ -113,7 +114,7 @@ class ORMDescriptor:
 
         instance._attribute_cache.pop(self._name, None)
 
-    def __delete__(self, instance: ORMClass) -> None:
+    def __delete__(self, instance: LiveAttribMixin) -> None:
         if self._remover:
             self._remover(instance, self._name)
         instance._attribute_cache.pop(self._name, None)
