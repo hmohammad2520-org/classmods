@@ -12,7 +12,7 @@ from ._remote_attrib import (
 from ._method_monitor import MethodMonitor
 
 # Decorators
-from ._decorators import logwrap
+from ._logwrap import logwrap
 
 __all__ = [
     'version',
