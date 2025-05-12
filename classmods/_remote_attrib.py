@@ -2,12 +2,12 @@ import time
 from typing import Any, Optional, Callable, Type
 
 
-class LiveAttribMixin:
+class RemoteAttribMixin:
     def __init__(self) -> None:
         self._attribute_cache: dict[str, tuple[Any, float]] = {}
 
 
-class LiveAttribType:
+class RemoteAttribType:
     def __init__(
             self,
             raw_class: Type,
@@ -35,13 +35,13 @@ class LiveAttribType:
         return self._raw_class
 
 
-class LiveAttrib:
+class RemoteAttrib:
     def __init__(
             self,
-            type: LiveAttribType,
-            getter: Optional[Callable[[LiveAttribMixin], Any]] = None,
-            setter: Optional[Callable[[LiveAttribMixin, str], None]] = None,
-            remover: Optional[Callable[[LiveAttribMixin, str], None]] = None,
+            type: RemoteAttribType,
+            getter: Optional[Callable[[RemoteAttribMixin], Any]] = None,
+            setter: Optional[Callable[[RemoteAttribMixin, str], None]] = None,
+            remover: Optional[Callable[[RemoteAttribMixin, str], None]] = None,
             *,
             validator: Optional[Callable[[str], bool]] = None,
             cache_timeout: int = 0,
@@ -70,7 +70,7 @@ class LiveAttrib:
     def __set_name__(self, owner, name: str) -> None:
         self._name = name
 
-    def __get__(self, instance: Optional[LiveAttribMixin], _) -> Any:
+    def __get__(self, instance: Optional[RemoteAttribMixin], _) -> Any:
         if instance is None:
             return self
 
@@ -92,7 +92,7 @@ class LiveAttrib:
 
         return value
 
-    def __set__(self, instance: LiveAttribMixin, value: Any) -> None:
+    def __set__(self, instance: RemoteAttribMixin, value: Any) -> None:
         if not self._changeable:
             raise AttributeError(f"{self._name} is read-only.")
 
@@ -114,7 +114,7 @@ class LiveAttrib:
 
         instance._attribute_cache.pop(self._name, None)
 
-    def __delete__(self, instance: LiveAttribMixin) -> None:
+    def __delete__(self, instance: RemoteAttribMixin) -> None:
         if self._remover:
             self._remover(instance, self._name)
         instance._attribute_cache.pop(self._name, None)
