@@ -5,8 +5,7 @@ from __version__ import __version__ as version
 from ._remote_attrib import (
     RemoteAttribMixin, 
     RemoteAttrib, 
-    RemoteAttribType
-
+    RemoteAttribType,
     )
 
 # Method_Spy
