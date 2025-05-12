@@ -1,3 +1,6 @@
+# __version__
+from __version__ import __version__ as version
+
 # Live Attrib
 from ._remote_attrib import (
     RemoteAttribMixin, 
@@ -13,6 +16,8 @@ from ._method_monitor import MethodMonitor
 from ._decorators import logwrap
 
 __all__ = [
+    'version',
+
     'RemoteAttribMixin',
     'RemoteAttrib',
     'RemoteAttribType',
