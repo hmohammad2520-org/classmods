@@ -1,5 +1,5 @@
 # __version__
-from __version__ import __version__ as version
+from .__version__ import __version__ as version
 
 # Live Attrib
 from ._remote_attrib import (
