@@ -11,7 +11,7 @@ class RemoteAttribType:
     def __init__(
             self,
             raw_class: Type,
-            constructor: Type | Callable[[Any], Any] = None,
+            constructor: Optional[Type | Callable[[Any], Any]] = None,
     ) -> None:
 
         self._raw_class = raw_class
