@@ -26,8 +26,9 @@ class MethodMonitor:
 
         Args:
             target (Type): The target class whose method will be monitored.
-            callable (MonitorCallable): A callable to execute when the target method is called.
-                Signature: monitor_callable(instance: object, *monitor_args, **monitor_kwargs).
+            callable (MonitorCallable): A callable to execute when the target method is called. -
+                Signature: monitor_callable(instance: object, *monitor_args, **monitor_kwargs). -
+                **warning**: sends `None` as the first arg to `MonitorCallable` if target method is `StaticMethod` !!
             monitor_args (tuple): Positional arguments to pass to `callable` (default: empty tuple).
             monitor_kwargs (dict): Keyword arguments to pass to `callable` (default: empty dict).
             target_method (str): Name of the method to monitor (default: '__init__').
@@ -66,6 +67,13 @@ class MethodMonitor:
     def _create_original_name(self, method_name: str) -> str:
         return f'__original_{method_name}'
 
+    @staticmethod
+    def _get_method_type(method: staticmethod|classmethod|Callable[[Any] ,Any]) -> classmethod|Callable[[Any] ,Any]|None:
+        return (
+            None if isinstance(method, staticmethod)
+            else method if isinstance(method, classmethod)
+            else method
+        )
 
     def _wrap_class_method(self, target: Type, method_name: str) -> None:
         """Wrap the target method to call all Monitors."""
@@ -78,15 +86,20 @@ class MethodMonitor:
         if not hasattr(target, original_name):
             setattr(target, original_name, getattr(target, method_name))
 
-        @wraps(getattr(target, original_name))
-        def new_method(instance: Any, *args, **kwargs) -> Any:
-            original_method: Callable = getattr(instance, original_name)
+        original_method = getattr(target, original_name)
+
+        @wraps(original_method)
+        def new_method(*args, **kwargs) -> Any:
             output = original_method(*args, **kwargs)
 
             key = self._create_registery_key()
             for monitor in MethodMonitor.monitors_registery.get(key, []):
                 if monitor._is_active():
-                    monitor._monitor_callable(instance, *monitor._monitor_args, **monitor._monitor_kwargs)
+                    monitor._monitor_callable(
+                        self._get_method_type(original_method), 
+                        *monitor._monitor_args, 
+                        **monitor._monitor_kwargs,
+                        )
 
             return output
 
