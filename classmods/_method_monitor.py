@@ -42,7 +42,7 @@ class MethodMonitor:
             ...     print(f"Monitor triggered on {instance}")
             >>> monitor = MethodMonitor(MyClass, my_handler, target_method='my_method')
             >>> obj = MyClass()
-            >>> obj.my_method()  # Calls my_handler(obj)
+            >>> obj.my_method()  # Also calls `my_handler(obj)`
         """
 
         self._target = target
