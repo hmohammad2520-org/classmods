@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Tuple, Type, Callable
 from functools import wraps
 
-MonitorCallable = Callable[..., None]
+MonitorCallable = Callable[[object|None, Any], None]
 
 class MethodMonitor:
     # Dictionary to store monitors for each (class, method) pair
