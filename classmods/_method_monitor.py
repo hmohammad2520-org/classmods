@@ -68,7 +68,7 @@ class MethodMonitor:
         return f'__original_{method_name}'
 
     @staticmethod
-    def _get_method_type(method: staticmethod|classmethod|Callable[[Any] ,Any]) -> classmethod|Callable[[Any] ,Any]|None:
+    def _get_first_arg(method: staticmethod|classmethod|Callable[[Any] ,Any]) -> classmethod|Callable[[Any] ,Any]|None:
         return (
             None if isinstance(method, staticmethod)
             else method if isinstance(method, classmethod)
@@ -96,7 +96,7 @@ class MethodMonitor:
             for monitor in MethodMonitor.monitors_registery.get(key, []):
                 if monitor._is_active():
                     monitor._monitor_callable(
-                        self._get_method_type(original_method), 
+                        self._get_first_arg(original_method), 
                         *monitor._monitor_args, 
                         **monitor._monitor_kwargs,
                         )
