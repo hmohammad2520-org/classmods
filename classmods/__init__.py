@@ -5,7 +5,6 @@ from ._decorators import (
     return_exception_on_error,
     return_true_on_error,
     return_false_on_error,
-
 )
 
 # Live Attrib
@@ -13,7 +12,7 @@ from ._remote_attrib import (
     RemoteAttribMixin, 
     RemoteAttrib, 
     RemoteAttribType,
-    )
+)
 
 # Method_Spy
 from ._method_monitor import MethodMonitor
