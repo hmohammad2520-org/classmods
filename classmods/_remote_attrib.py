@@ -4,7 +4,7 @@ from typing import Any, Optional, Callable, Type
 
 class RemoteAttribMixin:
     def __init__(self) -> None:
-        self._attribute_cache: dict[str, tuple[Any, float]] = {}
+        self.__attribute_cache__: dict[str, tuple[Any, float]] = {}
 
 
 class RemoteAttribType:
@@ -77,7 +77,7 @@ class RemoteAttrib:
         if self._sensitive:
             raise PermissionError(f"Access to {self._name} is restricted. Data marked as sensetive.")
 
-        cache_entry = instance._attribute_cache.get(self._name)
+        cache_entry = instance.__attribute_cache__.get(self._name)
         if cache_entry and (time.time() - cache_entry[1] <= self._cache_timeout):
             return cache_entry[0]
 
@@ -88,7 +88,7 @@ class RemoteAttrib:
         value = self._type.to_python(raw_value)
 
         if self._cache_timeout > 0:
-            instance._attribute_cache[self._name] = (value, time.time())
+            instance.__attribute_cache__[self._name] = (value, time.time())
 
         return value
 
@@ -112,9 +112,9 @@ class RemoteAttrib:
             if self._setter:
                 self._setter(instance, value)
 
-        instance._attribute_cache.pop(self._name, None)
+        instance.__attribute_cache__.pop(self._name, None)
 
     def __delete__(self, instance: RemoteAttribMixin) -> None:
         if self._remover:
             self._remover(instance, self._name)
-        instance._attribute_cache.pop(self._name, None)
+        instance.__attribute_cache__.pop(self._name, None)
