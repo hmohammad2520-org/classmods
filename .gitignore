@@ -1,0 +1,9 @@
+.git
+.pytest_cache
+.__cache__
+.env
+
+/.vscode/
+/.venv/
+
+requirements.txt
