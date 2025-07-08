@@ -9,7 +9,7 @@ def test_standard_use():
 
 def test_with_custom_leveling():
     # Example with Custom Levels
-    @logwrap(before=('INFO', 'Function starting'), after=('INFO', 'Function ended'), show_args='DEBUG')
+    @logwrap(before=('INFO', 'Function starting'), after=('INFO', 'Function ended'))
     def my_func(my_arg, my_kwarg=None):
         ...
     my_func('hello', my_kwarg=123) # calling the function
