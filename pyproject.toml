@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "classmods"
-version = "0.0.3"
+version = "0.1.0"
 description = "Simple mods for python classes."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
-    { name = "Radin-System", email = "technical@rsto.ir" }
+    { name = "hmohammad2520-org", email = "hmohammad2520@gmail.com" }
 ]
 keywords = ["python", "class", "mods", "modification", "descriptors", "methods", "methodmod", "methodobserve"]
 classifiers = [
@@ -21,5 +21,5 @@ dependencies = []
 requires-python = ">=3.9"
 
 [project.urls]
-Homepage = "https://github.com/Radin-System/classmods"
-BugTracker = "https://github.com/Radin-System/classmods/issues"
+Homepage = "https://github.com/hmohammad2520-org/classmods"
+BugTracker = "https://github.com/hmohammad2520-org/classmods/issues"
