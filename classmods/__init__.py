@@ -8,12 +8,7 @@ from ._remote_attrib import (
 )
 from ._method_monitor import MethodMonitor
 from ._constant_attrib import ConstantAttrib
-from ._decorators import (
-    return_exception_on_error,
-    return_true_on_error,
-    return_false_on_error,
-    logwrap,
-)
+from ._decorators import logwrap, suppress_errors
 
 __all__ = [
     'version',
@@ -22,8 +17,6 @@ __all__ = [
     'RemoteAttribType',
     'ConstantAttrib',
     'MethodMonitor',
-    'return_exception_on_error',
-    'return_true_on_error',
-    'return_false_on_error',
     'logwrap',
+    'suppress_errors',
 ]
