@@ -68,12 +68,8 @@ class MethodMonitor:
         return f'__original_{method_name}'
 
     @staticmethod
-    def _get_first_arg(method: staticmethod|classmethod|Callable[[Any] ,Any]) -> classmethod|Callable[[Any] ,Any]|None:
-        return (
-            None if isinstance(method, staticmethod)
-            else method if isinstance(method, classmethod)
-            else method
-        )
+    def _is_static_method(method: staticmethod|classmethod|Callable[[Any] ,Any]) -> bool:
+        return isinstance(method, (staticmethod, classmethod))
 
     def _wrap_class_method(self, target: Type, method_name: str) -> None:
         """Wrap the target method to call all Monitors."""
@@ -96,10 +92,10 @@ class MethodMonitor:
             for monitor in MethodMonitor.monitors_registery.get(key, []):
                 if monitor._is_active():
                     monitor._monitor_callable(
-                        self._get_first_arg(original_method), 
+                        args[0] if self._is_static_method(original_method) else None,
                         *monitor._monitor_args, 
                         **monitor._monitor_kwargs,
-                        )
+                    )
 
             return output
 
