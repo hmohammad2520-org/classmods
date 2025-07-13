@@ -1,4 +1,3 @@
-from typing import Any, Callable
 from classmods import MethodMonitor
 
 # a list to get results
@@ -19,11 +18,17 @@ class MyClass:
     @staticmethod
     def static_method():
         print('Static Method')
-    
+
+    def objects_test_callable(self):
+        return True
+
     def __str__(self):
         return f'<{self.name}>'
 
-def monitor_callable(obj: object, *args, **kwargs) -> None:
+def monitor_callable(obj, *args, **kwargs) -> None:
+    if hasattr(obj, 'objects_test_callable'):
+        assert obj.objects_test_callable()
+
     test_list.append(f'Monitor Called on: {obj.__class__.__name__} -- args={args}, kwargs={kwargs}')
 
 def check_list():

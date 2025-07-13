@@ -1,8 +1,6 @@
 from typing import Any, Dict, List, Tuple, Type, Callable
 from functools import wraps
 
-MonitorCallable = Callable[[object|None, Any], None]
-
 class MethodMonitor:
     # Dictionary to store monitors for each (class, method) pair
     monitors_registery: Dict[Tuple[Type, str], List['MethodMonitor']] = {}
@@ -10,7 +8,7 @@ class MethodMonitor:
     def __init__(
             self, 
             target: Type, 
-            callable: MonitorCallable,
+            callable: Callable[..., None],
             monitor_args: tuple = (),
             monitor_kwargs: dict = {},
             *,
@@ -44,7 +42,6 @@ class MethodMonitor:
             >>> obj = MyClass()
             >>> obj.my_method()  # Also calls `my_handler(obj)`
         """
-
         self._target = target
         self._monitor_callable = callable
         self._monitor_args = monitor_args
@@ -90,7 +87,7 @@ class MethodMonitor:
 
             key = self._create_registery_key()
             for monitor in MethodMonitor.monitors_registery.get(key, []):
-                if monitor._is_active():
+                if monitor.is_active():
                     monitor._monitor_callable(
                         args[0] if self._is_static_method(original_method) else None,
                         *monitor._monitor_args, 
@@ -125,11 +122,11 @@ class MethodMonitor:
                 del self.monitors_registery[key]
 
 
-    def _is_active(self) -> bool:
+    def is_active(self) -> bool:
         return bool(self._active)
 
     def __bool__(self) -> bool:
-        return self._is_active()
+        return self.is_active()
 
     def __str__(self) -> str:
         return f'<MethodMonitor of: {self._target} (method={self._target_method})>'
