@@ -33,26 +33,25 @@ def logwrap(
         after: Tuple of log level and message to log after function call or string with default of `INFO` level.
 
     Examples:
-        >>> # Example with Custom Levels
-        >>> @logwrap(before=('INFO', '{func} starting, args={args} kwargs={kwargs}'), after=('INFO', '{my_func} ended'))
-        >>> def my_func(my_arg, my_kwarg=None):
-        >>>     ...
-        >>> my_func('hello', my_kwarg=123) # calling the function
-        ... Info - my_func Starting, args=('hello',), kwargs={'my_kwarg': 123}
-        ... Info - my_func Ended
-        >>> # Example with defaults.
+        >>> @logwrap(before=('INFO', '{func} starting, args={args} kwargs={kwargs}'), after=('INFO', '{func} ended'))
+        ... def my_func(my_arg, my_kwarg=None):
+        ...     ...
+        ... my_func('hello', my_kwarg=123)
+        Info - my_func Starting, args=('hello',), kwargs={'my_kwarg': 123}
+        Info - my_func Ended
+
         >>> @logwrap(before=True, after=True)
-        >>> def my_new_func():
-        >>>     ...
-        >>> my_new_func()
-        ... Debug - Calling my_new_func - args:(), kwargs:{}
-        ... Info - Function my_new_func ended
-        >>> # Example with Exception
+        ... def my_new_func():
+        ...     ...
+        ... my_new_func()
+        Debug - Calling my_new_func - args:(), kwargs:{}
+        Info - Function my_new_func ended
+
         >>> @logwrap(on_exception=True)
-        >>> def error_func():
-        >>>     raise Exception('My exception msg')
-        >>> error_func()
-        Error - Error on error_func: My exception msg')
+        ... def error_func():
+        ...     raise Exception('My exception msg')
+        ... error_func()
+        Error - Error on error_func: My exception msg
     """
     def normalize(
             default_level: LOG_LEVEL,
@@ -153,24 +152,26 @@ def suppress_errors(
                   The return type becomes a union of the original return type and the fallback.
 
     Example:
-        >>> @suppress_exception("true")
-        ... def risky_divide(a: int, b: int) -> float:
-        ...     return a / b
-        >>> risky_divide(1, 0)
-        True
-
         >>> @suppress_exception("exception")
-        ... def risky_divide(a: int, b: int) -> float:
-        ...     return a / b
-        >>> result = risky_divide(1, 0)
-        >>> isinstance(result, ZeroDivisionError)
+        ... def is_connected() -> bool:
+        ...     socket.sendall(b'', MSG_DONTWAIT)
+        ...     return True
+        >>> is_connected()
+        OSError(...)
+
+        >>> @suppress_exception("true")
+        ... def has_problems() -> bool:
+        ...     device.test_connection()
+        ...     return false
+        >>> has_problems()
         True
 
         >>> @suppress_exception("false")
-        ... def risky_divide(a: int, b: int) -> float:
-        ...     return a / b
-        >>> risky_divide(1, 0)
-        False
+        ... def is_connected() -> bool:
+        ...     socket.sendall(b'', MSG_DONTWAIT)
+        ...     return True
+        >>> is_connected()
+        True
 
     Notes:
         - Only standard Python exceptions (derived from `Exception`) are caught.
