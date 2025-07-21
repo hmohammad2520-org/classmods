@@ -1,11 +1,12 @@
 import logging
 from functools import wraps
-from typing import Callable, Literal, Optional, ParamSpec, Tuple, TypeAlias, TypeVar, Union, overload
+from typing import Any, Callable, Literal, Optional, ParamSpec, Tuple, Type, TypeAlias, TypeVar, Union, overload
 
 LOG_LEVEL: TypeAlias = Literal['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET', 'DEFAULT']
 
 P = ParamSpec("P")
 R = TypeVar("R")
+T = TypeVar("T")
 
 def logwrap(
         before: Optional[Tuple[LOG_LEVEL, str]] | str | bool = None,
@@ -33,25 +34,25 @@ def logwrap(
         after: Tuple of log level and message to log after function call or string with default of `INFO` level.
 
     Examples:
-        >>> @logwrap(before=('INFO', '{func} starting, args={args} kwargs={kwargs}'), after=('INFO', '{func} ended'))
-        ... def my_func(my_arg, my_kwarg=None):
-        ...     ...
-        ... my_func('hello', my_kwarg=123)
-        Info - my_func Starting, args=('hello',), kwargs={'my_kwarg': 123}
-        Info - my_func Ended
+    >>> @logwrap(before=('INFO', '{func} starting, args={args} kwargs={kwargs}'), after=('INFO', '{func} ended'))
+    ... def my_func(my_arg, my_kwarg=None):
+    ...     ...
+    ... my_func('hello', my_kwarg=123)
+    Info - my_func Starting, args=('hello',), kwargs={'my_kwarg': 123}
+    Info - my_func Ended
 
-        >>> @logwrap(before=True, after=True)
-        ... def my_new_func():
-        ...     ...
-        ... my_new_func()
-        Debug - Calling my_new_func - args:(), kwargs:{}
-        Info - Function my_new_func ended
+    >>> @logwrap(before=True, after=True)
+    ... def my_new_func():
+    ...     ...
+    ... my_new_func()
+    Debug - Calling my_new_func - args:(), kwargs:{}
+    Info - Function my_new_func ended
 
-        >>> @logwrap(on_exception=True)
-        ... def error_func():
-        ...     raise Exception('My exception msg')
-        ... error_func()
-        Error - Error on error_func: My exception msg
+    >>> @logwrap(on_exception=True)
+    ... def error_func():
+    ...     raise Exception('My exception msg')
+    ... error_func()
+    Error - Error on error_func: My exception msg
     """
     def normalize(
             default_level: LOG_LEVEL,
@@ -121,75 +122,49 @@ def logwrap(
 
 
 @overload
-def suppress_errors(mode: Literal["exception"]) -> Callable[[Callable[..., R]], Callable[..., Union[R, Exception]]]: ...
+def suppress_errors(fallback: type[Exception]) -> Callable[[Callable[..., R]], Callable[..., Union[R, Exception]]]: ...
 @overload
-def suppress_errors(mode: Literal["true"]) -> Callable[[Callable[..., R]], Callable[..., Union[R, Literal[True]]]]: ...
-@overload
-def suppress_errors(mode: Literal["false"]) -> Callable[[Callable[..., R]], Callable[..., Union[R, Literal[False]]]]: ...
-@overload
-def suppress_errors(mode: Literal["exception", "true", "false"]): ...
-def suppress_errors(
-        mode: Literal["exception", "true", "false"]
-    ) -> Callable[
-        [Callable[..., R]],
-        Callable[..., Union[R, bool, Exception]]
-        ]:
+def suppress_errors(fallback: T) -> Callable[[Callable[..., R]], Callable[..., Union[R, T]]]: ...
+
+def suppress_errors(fallback: Any) -> Callable[[Callable[..., R]], Callable[..., Union[R, Any]]]:
     """
     A decorator that suppresses exceptions raised by the wrapped function and returns
-    a fallback value instead, based on the selected mode.
-
-    This decorator is useful when you want to avoid raising exceptions and handle errors
-    gracefully by returning a consistent fallback value.
+    a fallback value instead.
 
     Parameters:
-        mode (Literal["true", "false", "exception"]): Determines what to return when an exception is caught.
-            - "true": Returns `True` if an exception occurs.
-            - "false": Returns `False` if an exception occurs.
-            - "exception": Returns the caught exception object instead of raising it.
+        fallback: Determines what to return when an exception is caught.
+            - Exception class (like Exception): Returns the caught exception object
+            - Any other value: Returns that value when exception occurs
 
     Returns:
-        Callable: A decorated version of the original function, with modified error behavior.
-                  The return type becomes a union of the original return type and the fallback.
+        Callable: A decorated version of the original function that returns either:
+                  - The original return value, or
+                  - The fallback value/exception
 
     Example:
-        >>> @suppress_exception("exception")
-        ... def is_connected() -> bool:
-        ...     socket.sendall(b'', MSG_DONTWAIT)
-        ...     return True
-        >>> is_connected()
-        OSError(...)
+    >>> @suppress_errors(Exception)
+    ... def risky_op() -> int:
+    ...     return 1 / 0
+    >>> result = risky_op()  # Returns ZeroDivisionError
 
-        >>> @suppress_exception("true")
-        ... def has_problems() -> bool:
-        ...     device.test_connection()
-        ...     return false
-        >>> has_problems()
-        True
-
-        >>> @suppress_exception("false")
-        ... def is_connected() -> bool:
-        ...     socket.sendall(b'', MSG_DONTWAIT)
-        ...     return True
-        >>> is_connected()
-        True
+    >>> @suppress_errors(False)
+    ... def safe_op() -> bool:
+    ...     raise ValueError("error")
+    >>> result = safe_op()  # Returns False
 
     Notes:
         - Only standard Python exceptions (derived from `Exception`) are caught.
         - Does not suppress `KeyboardInterrupt`, `SystemExit`, or `GeneratorExit`.
         - The decorator preserves the original function's metadata (name, docstring, etc.).
-
-    Raises:
-        ValueError: If the provided mode is not one of the allowed values.
     """
-    def decorator(func: Callable[..., R]) -> Callable[..., Union[R, bool, Exception]]:
+    def decorator(func: Callable[..., R]) -> Callable[..., Union[R, Any]]:
         @wraps(func)
-        def wrapper(*args, **kwargs):
-            try: return func(*args, **kwargs)
+        def wrapper(*args: Any, **kwargs: Any) -> Union[R, Any]:
+            try:
+                return func(*args, **kwargs)
             except Exception as e:
-                if   mode == "exception": return e
-                elif mode == "true": return True
-                elif mode == "false": return False
-                else: raise ValueError(f"Invalid mode: {mode}")
-
+                if fallback is Exception:
+                    return e
+                return fallback
         return wrapper
     return decorator

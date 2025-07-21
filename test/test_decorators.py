@@ -1,26 +1,30 @@
 from classmods import suppress_errors
 
-@suppress_errors('exception')
-def return_exception() -> bool:
+@suppress_errors(Exception)
+def return_exception():
     raise Exception('This is test Error')
 
-@suppress_errors('true')
-def return_true() -> bool:
+@suppress_errors(True)
+def return_true():
     raise Exception('This is test Error')
 
-@suppress_errors('false')
-def return_false() -> bool:
+@suppress_errors(False)
+def return_false():
     raise Exception('This is test Error')
 
+@suppress_errors('Failed')
+def return_any():
+    raise Exception('This is test Error')
 
-def test_return_exception():
+def test_supress_error():
     result = return_exception()
-    assert isinstance(result, Exception)
+    assert isinstance(result, Exception), 'Expected Exception'
 
-def test_true():
     result = return_true()
-    assert result is True
+    assert result is True, f"Expected True, got {result}"
 
-def test_false():
     result = return_false()
-    assert result is False
+    assert result is False, f"Expected False, got {result}"
+
+    result = return_any()
+    assert result == 'Failed', f"Expected 'Failed', got {result}"
