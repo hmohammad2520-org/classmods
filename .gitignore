@@ -3,7 +3,4 @@
 .__cache__
 .env
 
-/.vscode/
 /.venv/
-
-requirements.txt
