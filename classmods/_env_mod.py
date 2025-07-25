@@ -95,7 +95,7 @@ class ENVMod:
         Decorator to register class methods for env parsing.
 
         Raise:
-            TypeError: if a object is not env parsable.
+            TypeError: If an argument is not env parsable.
 
         Example:
         >>> class APIService:
@@ -110,10 +110,9 @@ class ENVMod:
                 ) -> none:
         ...        ...
         
-        In this example ENVMod will create env items for each object in init except ssl_key.
+        In this example ENVMod will create env items for each argument except ssl_key.
         
         Note: Make sure you add type hints to get the same type when loading from env file.
-
         """
         exclude = exclude or []
 
@@ -128,7 +127,7 @@ class ENVMod:
             type_hints = get_type_hints(func)
 
             for param in sig.parameters.values():
-                if param.name == 'self' or param.name in exclude:
+                if param.name in ['self', 'cls'] or param.name in exclude:
                     continue
 
                 param_type = type_hints.get(param.name, str)
@@ -196,16 +195,20 @@ class ENVMod:
                 if value.lower() in ('1', 'true', 'yes'): return True
                 elif value.lower() in ('0', 'false', 'no'): return False
                 else: raise ValueError(f"Casting env is not a valid bool: {value}. valid bool: '0', 'false', 'no', '1', 'true', 'yes'")
+
             return _type(value)
 
         result = {}
         for arg, env_key in mapping.items():
             value = os.environ.get(env_key)
-            if value is None:
+            if value is None or value == '':
                 result[arg] = None
                 continue
 
             result[arg] = cast(value, types.get(arg, str))
+
+        # Remove None from results
+        result = {k: v for k, v in result.items() if v is not None}
 
         return result
 
