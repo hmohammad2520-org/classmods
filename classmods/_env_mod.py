@@ -1,96 +1,204 @@
-import os
-import inspect
-from typing import ClassVar, Optional, List, Dict, Any, Callable, Set, Type, get_type_hints
+import os, inspect
 from functools import wraps
+from typing import (
+    ClassVar,
+    Literal,
+    Optional,
+    List,
+    Dict,
+    Any,
+    Callable,
+    Set,
+    Type,
+    TypeAlias,
+    Union,
+    get_type_hints
+)
+
+ENVParsableTypes: TypeAlias = Type[str | int | float | bool]
+ENVParsable: TypeAlias = str | int | float | bool
+
+class _Item:
+    """
+    Represents a single environment variable with metadata, type casting,
+    default handling, and formatting support for .env example generation.
+    """
+    def __init__(
+            self,
+            name: str,
+            type_hint: Any,
+            prefix: str = '',
+            description: Optional[List[str]] = None,
+            required: bool = False,
+            default: Optional[str] = None,
+        ) -> None:
+        self._name = name
+        self._prefix = prefix
+        self._default = '' if default is None else str(default)
+        self._required = required
+        self._description = [line.strip() + '\n' for line in (description or [])]
+
+        self._value = None
+        self._normal_type = self._normalize_type(type_hint)
+        self._env_key = self._generate_key()
+
+    def _generate_key(self) -> str:
+        """
+        Generate and normalize env key.
+        """
+        clean = self._name
+        for ch in "- .":
+            clean = clean.replace(ch, "_")
+        return f"{self._prefix}_{clean.upper()}" if self._prefix else clean.upper()
+
+    def _normalize_type(self, type_hint: Any) -> ENVParsableTypes:
+        """
+        Resolve supported env types from typing hints (e.g., Optional[str], Literal['x'], etc.).
+        """
+        origin = getattr(type_hint, '__origin__', None)
+
+        # Direct types
+        if type_hint in (str, int, float, bool):
+            return type_hint
+
+        # Optional[...] or Union[...]
+        elif origin is Union:
+            args = [arg for arg in type_hint.__args__ if arg is not type(None)]
+            if len(args) == 1:
+                return self._normalize_type(args[0])
+
+        # Literal['a', 'b'] => treat as str
+        elif origin is Literal:
+            return str
+
+        raise TypeError(
+                f"Cannot register parameter '{self._name}' of type '{type_hint}'"
+            )
+
+    def cast(self, value: str) -> ENVParsable:
+        """
+        Cast the string value to its type_hint.
+        """
+        if self._normal_type == bool:
+            if value.lower() in ('1', 'true', 'yes'): return True
+            if value.lower() in ('0', 'false', 'no'): return False
+            raise ValueError(f"Invalid boolean: {value}")
+
+        return self._normal_type(value)
+
+
+    def load_value(self) -> ENVParsable | None:
+        """
+        Loads the value from env.
+        """
+        value = os.environ.get(self._env_key)
+        if value is None or value == '':
+            if self._required:
+                self._value = None
+                raise ValueError(f'This env is required and can not be None: {self._env_key}')
+
+            else:
+                self._value = None
+                return None
+
+        self._value = value
+        return self.cast(value)
+
+    def __str__(self) -> str:
+        return f"{self._env_key}={self._value or self._default or ''}"
+
+    def __repr__(self) -> str:
+        return (
+            f"<_Item key={self._env_key!r}, type={self._normal_type.__name__}, "
+            f"default={self._default!r}, required={self._required}>"
+        )
+
+
+class _Section:
+    """
+    Represents a logical group of environment variables, typically tied to a class or component.
+    Holds multiple _Item instances and provides formatted string output for .env_example sections.
+    """
+    def __init__(self, name: str) -> None:
+        self._name: str = name.upper()
+        self._items: List[_Item] = []
+
+    def _add_item(self, item: _Item) -> None:
+        self._items.append(item)
+
+    def _generate(self) -> str:
+        lines: List[str] = []
+        lines.append(f"{'#' * (len(self._name) + 24)}")
+        lines.append(f"########### {self._name} ###########")
+
+        for item in self._items:
+            lines.append(f"###### {item._name} {'(Required)' if item._required else ''}")
+            lines.append("####")
+            if item._description:
+                lines.extend(f"## {line.strip()}" for line in item._description)
+            lines.append(f"## Default={item._default}")
+            lines.append("####")
+            lines.append(f"{item._env_key}=")
+            lines.append("")
+
+        lines.append(f"{'#' * (len(self._name) + 24)}")
+        return "\n".join(lines)
+
+
+    def __str__(self) -> str:
+        return f"Section: {self._name} ({len(self._items)} items)"
+
+    def __repr__(self) -> str:
+        return f"<_Section name={self._name!r}, items={[i._env_key for i in self._items]}>"
+
+
+class _ENVFile:
+    """
+    Handles generation of the .env_example file based on the current
+    registered environment sections and items.
+    """
+    def __init__(self) -> None:
+        self._sections: Dict[str, _Section] = {}
+
+    def _get_or_create(self, name: str) -> _Section:
+        name = name.upper()
+        if name not in self._sections:
+            self._sections[name] = _Section(name)
+
+        return self._sections[name]
+
+    def _generate(self) -> str:
+        return '\n'.join(section._generate() for section in self._sections.values())
+
+    def _save_as_file(self, path: str) -> None:
+        with open(path, 'w') as f:
+            f.write(self._generate())
+
+    def _get_all_keys(self) -> List[str]:
+        return [item._env_key for section in self._sections.values() for item in section._items]
+
+    def __str__(self) -> str:
+        return f".env_example generator for {len(self._sections)} sections"
+
+    def __repr__(self) -> str:
+        return f"<_ENVFile sections={[s._name for s in self._sections.values()]}>"
 
 
 class ENVMod:
     """
-    A utility to generate .env files, auto-load environment variables from constructors,
-    and support auto-documentation and integration with python-dotenv.
+    Main API class for managing .env variables. Supports manual and decorator-based
+    registration of environment items, type-safe value loading, and .env_example generation.
     """
-    class _Item:
-        """
-        Represents a single environment variable item extracted from constructor args.
-        """
-        def __init__(
-                self,
-                arg_name: str,
-                class_prefix: str = '',
-                description: Optional[List[str]] = None,
-                required: bool = False,
-                default: Optional[str] = None,
-            ) -> None:
-            self._arg_name: str = arg_name
-            self._default: str = default or ''
-            self._required: bool = required
-            self._description: List[str] = [line.strip() + '\n' for line in (description or [])]
-            self._key: str = self._generate_key(class_prefix)
-
-        def _generate_key(self, prefix: str) -> str:
-            clean = self._arg_name
-            for ch in "- .":
-                clean = clean.replace(ch, "_")
-            return f"{prefix}_{clean.upper()}" if prefix else clean.upper()
-
-    class _Section:
-        """
-        A group of related environment items, grouped by class name.
-        """
-        def __init__(self, name: str) -> None:
-            self.name: str = name.upper()
-            self.items: List[ENVMod._Item] = []
-
-        def _add_item(self, item: 'ENVMod._Item') -> None:
-            self.items.append(item)
-
-        def _generate(self) -> str:
-            lines: List[str] = []
-            lines.append(f"{'#' * (len(self.name) + 24)}")
-            lines.append(f"########### {self.name} ###########")
-
-            for item in self.items:
-                lines.append(f"###### {item._arg_name} {'(Required)' if item._required else ''}")
-                lines.append("####")
-                if item._description:
-                    lines.extend(f"## {line.strip()}" for line in item._description)
-                lines.append(f"## Default={item._default}")
-                lines.append("####")
-                lines.append(f"{item._key}=")
-                lines.append("")
-
-            lines.append(f"{'#' * (len(self.name) + 24)}")
-            return "\n".join(lines)
-
-    class _ENVFile:
-        """
-        Handles the entire .env structure with multiple sections.
-        """
-        def __init__(self) -> None:
-            self.sections: Dict[str, ENVMod._Section] = {}
-
-        def _get_or_create(self, name: str) -> 'ENVMod._Section':
-            name = name.upper()
-            if name not in self.sections:
-                self.sections[name] = ENVMod._Section(name)
-            return self.sections[name]
-
-        def _generate(self) -> str:
-            return '\n'.join(section._generate() for section in self.sections.values())
-
-        def _save_as_file(self, path: str) -> None:
-            with open(path, 'w') as f:
-                f.write(self._generate())
-
-        def _get_all_keys(self) -> List[str]:
-            return [item._key for section in self.sections.values() for item in section.items]
-
     _envfile: _ENVFile = _ENVFile()
-    _registry: Dict[Callable, Dict[str, str]] = {}
+    _registry: Dict[Callable, _Section] = {}
     _used_env_keys: ClassVar[Set[str]] = set()
 
     @classmethod
-    def register(cls, *, exclude: Optional[List[str]] = None) -> Callable:
+    def register(
+            cls,*,
+            exclude: Optional[List[str]] = None,
+            cast: Optional[Dict[str, ENVParsableTypes]] = None,
+        ) -> Callable:
         """
         Decorator to register class methods for env parsing.
 
@@ -118,8 +226,8 @@ class ENVMod:
 
         def decorator(func: Callable) -> Callable:
             sig = inspect.signature(func)
-            qualname = func.__qualname__.split('.')[0].upper()
-            section = cls._envfile._get_or_create(qualname)
+            class_name = func.__qualname__.split('.')[0].upper()
+            section = cls._envfile._get_or_create(class_name)
             arg_map: Dict[str, str] = {}
 
             docstring = inspect.getdoc(func) or ""
@@ -130,38 +238,22 @@ class ENVMod:
                 if param.name in ['self', 'cls'] or param.name in exclude:
                     continue
 
-                param_type = type_hints.get(param.name, str)
-                if param_type not in (str, int, float, bool):
-                    raise TypeError(f"Cannot register parameter '{param.name}' of type '{param_type.__name__}'")
-
-                param_doc = [line.strip() for line in doc_lines if param.name in line.lower()]
-                default = (
-                    None if param.default is inspect.Parameter.empty else str(param.default)
+                item = cls.add(
+                    name = param.name,
+                    section_name = class_name,
+                    type_hint = cast.get(param.name) if cast and param.name in cast else type_hints.get(param.name, str),
+                    description = [line.strip() for line in doc_lines if param.name in line.lower()],
+                    default = None if param.default is inspect.Parameter.empty else str(param.default),
+                    required = param.default is inspect.Parameter.empty,
                 )
 
-                item = cls._Item(
-                    arg_name=param.name,
-                    class_prefix=qualname,
-                    description=param_doc,
-                    required=param.default is inspect.Parameter.empty,
-                    default=default,
-                )
-
-                # Check for duplicates
-                if item._key in cls._used_env_keys:
-                    raise ValueError(
-                        f"Duplicate environment key detected: '{item._key}' already registered. "
-                        f"Check other registered methods or exclude this parameter."
-                )
-                cls._used_env_keys.add(item._key)
-                section._add_item(item)
-                arg_map[param.name] = item._key
+                arg_map[param.name] = item._env_key
 
             @wraps(func)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
                 return func(*args, **kwargs)
 
-            cls._registry[wrapper] = arg_map
+            cls._registry[wrapper] = section
 
             return wrapper
         return decorator
@@ -177,38 +269,19 @@ class ENVMod:
         In above example the ENVMod will load the registered variables and pass them to the method.
 
         """
-        mapping = cls._registry.get(func)
-        if mapping is None:
-            for f, keys in cls._registry.items():
+        section = cls._registry.get(func)
+        if section is None:
+            for f, s in cls._registry.items():
                 if getattr(f, '__wrapped__', None) == func:
-                    mapping = keys
+                    section = s
                     break
 
-        if not mapping:
-            raise ValueError(f'This method or function is not registerd: {func.__name__}')
-
-        sig = inspect.signature(func)
-        types = get_type_hints(func)
-
-        def cast(value: str, _type: Type) -> Any:
-            if _type == bool:
-                if value.lower() in ('1', 'true', 'yes'): return True
-                elif value.lower() in ('0', 'false', 'no'): return False
-                else: raise ValueError(f"Casting env is not a valid bool: {value}. valid bool: '0', 'false', 'no', '1', 'true', 'yes'")
-
-            return _type(value)
+        if section is None:
+            raise ValueError(f'This method or function is not registered: {func.__name__}')
 
         result = {}
-        for arg, env_key in mapping.items():
-            value = os.environ.get(env_key)
-            if value is None or value == '':
-                result[arg] = None
-                continue
-
-            result[arg] = cast(value, types.get(arg, str))
-
-        # Remove None from results
-        result = {k: v for k, v in result.items() if v is not None}
+        for item in section._items:
+            result[item._name] = item.load_value()
 
         return result
 
@@ -236,6 +309,7 @@ class ENVMod:
 
         new_content = ''
         all_keys = expected_keys.union(existing.keys())
+
         for key in sorted(all_keys):
             value = existing.get(key, '')
             new_content += f"{key}={value}\n"
@@ -246,24 +320,37 @@ class ENVMod:
     @classmethod
     def add(
             cls,
+            name: str,
             section_name: str,
-            key: str,
+            type_hint: Any,
             description: Optional[List[str]] = None,
             default: Optional[str] = None,
             required: bool = False,
-        ) -> None:
+        ) -> _Item:
         """
         Manually add an env item not tied to a class.
         """
         section = cls._envfile._get_or_create(section_name)
-        item = cls._Item(
-            arg_name=key,
-            class_prefix=section.name,
-            description=description,
-            default=default,
-            required=required,
+        item = _Item(
+            name = name,
+            prefix = section._name,
+            type_hint = type_hint,
+            description = description,
+            default = default,
+            required = required,
+        )                
+
+        # Check for duplicates
+        if item._env_key in cls._used_env_keys:
+            raise ValueError(
+                f"Duplicate environment key detected: '{item._env_key}' already registered. "
+                f"Check other registered methods or exclude this parameter."
         )
+
+        cls._used_env_keys.add(item._env_key)
         section._add_item(item)
+
+        return item
 
     @staticmethod
     def load_dotenv(*args: Any, **kwargs: Any) -> None:
@@ -271,7 +358,7 @@ class ENVMod:
         Wrapper for python-dotenv, loads .env into os.environ.
         """
         try:
-            from dotenv import load_dotenv  # type: ignore
+            from dotenv import load_dotenv
             load_dotenv(*args, **kwargs)
         except ImportError:
             raise NotImplementedError(
