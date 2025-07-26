@@ -15,6 +15,11 @@ from typing import (
     get_type_hints
 )
 
+try: 
+    import dotenv as _
+except ImportError: 
+    print('ENVMod Warning: python-dotenv not installed. install for better usage')
+
 ENVParsableTypes: TypeAlias = Type[str | int | float | bool]
 ENVParsable: TypeAlias = str | int | float | bool
 
@@ -86,7 +91,6 @@ class _Item:
 
         return self._normal_type(value)
 
-
     def load_value(self) -> ENVParsable | None:
         """
         Loads the value from env.
@@ -103,6 +107,7 @@ class _Item:
 
         self._value = value
         return self.cast(value)
+
 
     def __str__(self) -> str:
         return f"{self._env_key}={self._value or self._default or ''}"
@@ -176,6 +181,7 @@ class _ENVFile:
 
     def _get_all_keys(self) -> List[str]:
         return [item._env_key for section in self._sections.values() for item in section._items]
+
 
     def __str__(self) -> str:
         return f".env_example generator for {len(self._sections)} sections"
