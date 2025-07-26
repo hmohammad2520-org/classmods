@@ -101,6 +101,10 @@ class _Item:
                 self._value = None
                 raise ValueError(f'This env is required and can not be None: {self._env_key}')
 
+            if self._default:
+                self._value = self.cast(self._default)
+                return self.cast(self._default)
+
             else:
                 self._value = None
                 return None
