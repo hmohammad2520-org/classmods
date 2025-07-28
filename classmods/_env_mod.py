@@ -39,7 +39,7 @@ class _Item:
         ) -> None:
         self._name = name
         self._prefix = prefix
-        self._default = '' if default is None else str(default)
+        self._default = default
         self._required = required
         self._description = [line.strip() + '\n' for line in (description or [])]
 
@@ -80,14 +80,18 @@ class _Item:
                 f"Cannot register parameter '{self._name}' of type '{type_hint}'"
             )
 
-    def cast(self, value: str) -> ENVParsable:
+    def cast(self, value: str) -> ENVParsable | None:
         """
         Cast the string value to its type_hint.
         """
         if self._normal_type == bool:
             if value.lower() in ('1', 'true', 'yes'): return True
             if value.lower() in ('0', 'false', 'no'): return False
+            if value.lower() in ('null', 'none'): return None
             raise ValueError(f"Invalid boolean: {value}")
+
+        if value == None:
+            return None
 
         return self._normal_type(value)
 
@@ -101,9 +105,9 @@ class _Item:
                 self._value = None
                 raise ValueError(f'This env is required and can not be None: {self._env_key}')
 
-            if self._default:
-                self._value = self.cast(self._default)
-                return self.cast(self._default)
+            elif self._default:
+                self._value = self._default
+                return self._default
 
             else:
                 self._value = None
@@ -114,12 +118,12 @@ class _Item:
 
 
     def __str__(self) -> str:
-        return f"{self._env_key}={self._value or self._default or ''}"
+        return f"{self._env_key}={self._value or self._default if self._default is not None else ''}"
 
     def __repr__(self) -> str:
         return (
             f"<_Item key={self._env_key!r}, type={self._normal_type.__name__}, "
-            f"default={self._default!r}, required={self._required}>"
+            f"default={self._default if self._default is not None else ''}, required={self._required}>"
         )
 
 
@@ -253,7 +257,7 @@ class ENVMod:
                     section_name = class_name,
                     type_hint = cast.get(param.name) if cast and param.name in cast else type_hints.get(param.name, str),
                     description = [line.strip() for line in doc_lines if param.name in line.lower()],
-                    default = None if param.default is inspect.Parameter.empty else str(param.default),
+                    default = None if param.default is inspect.Parameter.empty else param.default,
                     required = param.default is inspect.Parameter.empty,
                 )
 
