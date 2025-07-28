@@ -303,6 +303,9 @@ class ENVMod:
     def save_example(cls, path: str = ".env_example") -> None:
         """
         Save an example .env file based on all registered items.
+
+        WARNING: Do not store your values in the example file,
+        it gets overwritten on secound execution.
         """
         cls._envfile._save_as_file(path)
 

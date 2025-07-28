@@ -9,8 +9,8 @@ __all__ = [
     'get_version',
     'ConstantAttrib',
     'RemoteAttrib',
-    'logwrap',
-    'suppress_errors',
     'ENVMod',
     'MethodMonitor',
+    'logwrap',
+    'suppress_errors',
 ]
