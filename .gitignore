@@ -5,11 +5,7 @@
 .temp/
 .log/
 .db/
-.dev/
 __cache__/
 
 # abc Files
 .env
-dev_*.*
-
-agent_packages/

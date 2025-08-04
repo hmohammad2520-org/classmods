@@ -35,9 +35,12 @@ class TestClass:
         self.service = service
 
 def test_file_creations():
-    ENVMod.save_example('dev_env_example.txt')
+    if not os.path.exists('.temp'):
+        os.mkdir('.temp')
+
+    ENVMod.save_example('.temp/env_example.txt')
     ENVMod.sync_env_file()
-    assert os.path.exists('dev_env_example.txt')
+    assert os.path.exists('.temp/env_example.txt')
     assert os.path.exists('.env')
 
     with open('.env', 'w') as f:
