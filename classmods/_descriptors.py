@@ -52,7 +52,7 @@ class RemoteAttrib(Generic[T]):
     Why not use `@property`?
     - You can`t pass additional args, kwargs to a call; so your class keeps getting bigger.
     - caching is not available on `property`.
-    - easy usage with lambda ! and you get smaller space.
+    - easy usage with lambda ! and you save a lot of code.
 
     Example:
     >>> import requests
