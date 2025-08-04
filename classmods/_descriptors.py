@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, Optional, Callable, Self, Tuple, Type, TypeVar, Generic
+from typing import Any, Dict, Optional, Callable, Self, Tuple, Type, TypeVar, Generic, Union, overload
 
 T = TypeVar('T')
 
@@ -22,9 +22,13 @@ class ConstantAttrib(Generic[T]):
         self.name = name
         self.private_name = f"_{name}_constant"
 
-    def __get__(self, instance: Any, owner: Type[Any]) -> T:
+    @overload
+    def __get__(self, instance: None, owner: Type[Any]) -> 'ConstantAttrib[T]': ...
+    @overload
+    def __get__(self, instance: Any, owner: Type[Any]) -> T: ...
+    def __get__(self, instance: Any, owner: Type[Any]) -> Union[T, "ConstantAttrib[T]"]:
         if instance is None:
-            return self  # type: ignore
+            return self
 
         if self.private_name not in instance.__dict__:
             raise AttributeError(f"Constant attribute '{self.name}' not set")
@@ -125,7 +129,11 @@ class RemoteAttrib(Generic[T]):
     def __set_name__(self, owner: Type[Any], name: str) -> None:
         self.name = name
 
-    def __get__(self, instance: Optional[Any], owner: Optional[Type] = None) -> Self | T:
+    @overload
+    def __get__(self, instance: None, owner: Type[Any]) -> "RemoteAttrib[T]": ...
+    @overload
+    def __get__(self, instance: Any, owner: Type[Any]) -> T: ...
+    def __get__(self, instance: Optional[Any], owner: Optional[Type] = None) -> Union[T, "RemoteAttrib[T]"]:
         if instance is None:
             return self
 
@@ -173,4 +181,3 @@ class RemoteAttrib(Generic[T]):
             **self._del_kwargs,
         )
         instance._remote_attrib_cache.pop(self.name, None)
-

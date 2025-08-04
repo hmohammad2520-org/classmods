@@ -3,7 +3,7 @@ from classmods import ConstantAttrib, RemoteAttrib
 _remote_item = 1
 
 class MyClass:
-    _constant = ConstantAttrib()
+    _constant = ConstantAttrib[int]()
 
     def __init__(self) -> None:
         self._constant = 1
@@ -25,7 +25,7 @@ class MyClass:
         global _remote_item
         del _remote_item
 
-    _remote = RemoteAttrib(
+    _remote = RemoteAttrib[int](
         _get_remote, _set_remote, _del_remote,
     )
 
@@ -59,4 +59,4 @@ def test_remote_attrib():
         global _remote_item
         _remote_item  # type: ignore
     except NameError: ...
-    else: assert False, "Expected AttributeError"
+    else: assert False, "Expected NameError"
