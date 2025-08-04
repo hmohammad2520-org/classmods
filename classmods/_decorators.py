@@ -1,6 +1,6 @@
-import logging
+import logging, inspect
 from functools import wraps
-from typing import Any, Callable, Literal, Optional, ParamSpec, Tuple, Type, TypeAlias, TypeVar, Union, overload
+from typing import Any, Callable, Literal, Optional, ParamSpec, Tuple, TypeAlias, TypeVar, Union, overload
 
 LOG_LEVEL: TypeAlias = Literal['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET', 'DEFAULT']
 
@@ -14,45 +14,52 @@ def logwrap(
         after: Optional[Tuple[LOG_LEVEL, str]] | str | bool = None,
     ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """
-    Simple dynamic decorator to log function calls. Uses the logging module with your current project configurations.
-    Use LOG_LEVEL literal for using standard log levels.
-    The messages will get formated in proccess so you can use templating for better logging.
+    A simple dynamic decorator to log function calls using the `logging` module with your current project configurations.
+    Use the `LOG_LEVEL` literal to specify standard log levels.
 
-    (`func`: Function Name, `args`: Arguments Tuple, `kwargs`: Keyword Arguments Dict, `e`: The Exception if Exists)
+    LOG_LEVEL = ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET', 'DEFAULT']
 
-    Passing bool will use default levels and messages.(
-    Before: 'DEBUG - Calling {func} - args:{args}, kwargs:{kwargs}'
-    After: 'INFO - Function {func} ended'
-    On Exception: 'ERROR - Error on {func}: {e}')
+    - The messages are formatted dynamically using templating.
+        - Available variables:
+            - `func`: Function name
+            - `args`: Tuple of positional arguments
+            - `kwargs`: Dictionary of keyword arguments
+            - `e`: Exception object (if any)
+            - `result`: Return value of the function
 
-    **Warning**: If options are negative, it will not log the option.
-    **Warning**: Providing wrong log level won't raise any exception but will default to specified defaults with DEFAULT level.
+    - If `True` is passed to an option, it will use the default log level and message:
+        - Before: DEBUG - Calling {func} - args={args}, kwargs={kwargs}
+        - After: INFO - Function {func} ended. result={result}
+        - On Exception: ERROR - Error in {func}: {e}
+
+    - **Warning**: If an option is set to a negative value, logging for that stage will be skipped.
+    - **Warning**: If an invalid log level is provided, no exception will be raised. Instead, the decorator will fall back to the default log level.
 
     Args:
-        before: Tuple of log level and message to log before function call or string with default of `DEBUG` level.
-        on_exception: Tuple of log level and message to log exception of function call or string with default of `ERROR` level.
-        after: Tuple of log level and message to log after function call or string with default of `INFO` level.
+        before: A tuple of log level and message to log *before* the function call, or `True` to use the default.
+        on_exception: A tuple of log level and message to log *on exception*, or `True` to use the default.
+        after: A tuple of log level and message to log *after* the function call, or `True` to use the default.
 
     Examples:
-    >>> @logwrap(before=('INFO', '{func} starting, args={args} kwargs={kwargs}'), after=('INFO', '{func} ended'))
+    >>> @logwrap(before=('INFO', '{func} starting, args={args}, kwargs={kwargs}'), after=('INFO', '{func} ended'))
     ... def my_func(my_arg, my_kwarg=None):
     ...     ...
     ... my_func('hello', my_kwarg=123)
-    Info - my_func Starting, args=('hello',), kwargs={'my_kwarg': 123}
-    Info - my_func Ended
+    Info - my_func starting, args={'my_arg', 123}, kwargs={'my_arg': 'hello','my_kwarg': 123}
+    Info - my_func ended
 
     >>> @logwrap(before=True, after=True)
     ... def my_new_func():
     ...     ...
     ... my_new_func()
-    Debug - Calling my_new_func - args:(), kwargs:{}
-    Info - Function my_new_func ended
+    Debug - Calling my_new_func - kwargs={}
+    Info - Function my_new_func ended. result=None
 
     >>> @logwrap(on_exception=True)
     ... def error_func():
     ...     raise Exception('My exception msg')
     ... error_func()
-    Error - Error on error_func: My exception msg
+    Error - Error in error_func: My exception msg
     """
     def normalize(
             default_level: LOG_LEVEL,
@@ -71,7 +78,7 @@ def logwrap(
         Returns:
             (Tuple[LOG_LEVEL, str] | None): Normalized output for logging wraper
         """
-        if isinstance(option, bool) and option is True:
+        if isinstance(option, bool) and option:
             return (default_level, default_msg)
 
         elif isinstance(option, str):
@@ -80,23 +87,26 @@ def logwrap(
         elif isinstance(option, tuple):
             return option
 
-        elif not option or option is None:
-            return None
+    before = normalize('DEBUG', 'Calling {func} - kwargs={kwargs}', before)
+    after = normalize('INFO', 'Function {func} ended. result={result}', after)
+    on_exception = normalize('ERROR', 'Error in {func}: {e}', on_exception)
 
-    before = normalize('DEBUG', 'Calling {func} - args:{args}, kwargs:{kwargs}', before)
-    after = normalize('INFO', 'Function {func} ended', after)
-    on_exception = normalize('ERROR', 'Error on {func}: {e}', on_exception)
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
+        sig = inspect.signature(func)
+        logger = logging.getLogger(func.__module__)
 
-    def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            logger = logging.getLogger(func.__module__)
+            bound_args = sig.bind(*args, **kwargs)
+            bound_args.apply_defaults()
+
             func_name = func.__name__
+            unified_kwargs = dict(bound_args.arguments)
 
             fmt_context = {
                 'func': func_name,
-                'args': args,
-                'kwargs': kwargs,
+                'args': tuple(unified_kwargs.values()),
+                'kwargs': unified_kwargs,
             }
 
             if before:
@@ -105,6 +115,7 @@ def logwrap(
 
             try:
                 result = func(*args, **kwargs)
+                fmt_context['result'] = result
             except Exception as e:
                 if on_exception:
                     level, msg = on_exception
@@ -120,12 +131,10 @@ def logwrap(
         return wrapper
     return decorator
 
-
 @overload
 def suppress_errors(fallback: type[Exception]) -> Callable[[Callable[..., R]], Callable[..., Union[R, Exception]]]: ...
 @overload
 def suppress_errors(fallback: T) -> Callable[[Callable[..., R]], Callable[..., Union[R, T]]]: ...
-
 def suppress_errors(fallback: Any) -> Callable[[Callable[..., R]], Callable[..., Union[R, Any]]]:
     """
     A decorator that suppresses exceptions raised by the wrapped function and returns
