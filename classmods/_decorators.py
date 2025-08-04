@@ -2,7 +2,7 @@ import logging, inspect
 from functools import wraps
 from typing import Any, Callable, Literal, Optional, ParamSpec, Tuple, TypeAlias, TypeVar, Union, overload
 
-LOG_LEVEL: TypeAlias = Literal['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET', 'DEFAULT']
+LOG_LEVEL: TypeAlias = Literal['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET']
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -17,7 +17,7 @@ def logwrap(
     A simple dynamic decorator to log function calls using the `logging` module with your current project configurations.
     Use the `LOG_LEVEL` literal to specify standard log levels.
 
-    LOG_LEVEL = ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET', 'DEFAULT']
+    LOG_LEVEL = ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET']
 
     - The messages are formatted dynamically using templating.
         - Available variables:
@@ -88,8 +88,8 @@ def logwrap(
             return option
 
     before = normalize('DEBUG', 'Calling {func} - kwargs={kwargs}', before)
-    after = normalize('INFO', 'Function {func} ended. result={result}', after)
     on_exception = normalize('ERROR', 'Error in {func}: {e}', on_exception)
+    after = normalize('INFO', 'Function {func} ended. result={result}', after)
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
         sig = inspect.signature(func)
