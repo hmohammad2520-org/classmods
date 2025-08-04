@@ -46,8 +46,13 @@ class ConstantAttrib(Generic[T]):
 class RemoteAttrib(Generic[T]):
     """
     Descriptor that acts as a remote attribute.
-    It allows calling a method on the object to `get`, `set`, `delete`.
+    It allows calling a method on the object to `getter`, `setter`, `deleter`.
     You can modify mapped value on remote side with ease.
+
+    Why not use `@property`?
+    - You can`t pass additional args, kwargs to a call; so your class keeps getting bigger.
+    - caching is not available on `property`.
+    - easy usage with lambda ! and you get smaller space.
 
     Example:
     >>> import requests
@@ -55,76 +60,86 @@ class RemoteAttrib(Generic[T]):
     >>> class RemoteUser:
     ...     def __init__(self, user_id: int):
     ...         self.user_id = user_id
-    >>>
-    ...     def _get_name(self):
+    ...
+    ...     def _get_parm(self, parameter: str):
     ...         print("Fetching from API...")
-    ...         return requests.get(f"https://api.example.com/user/{self.user_id}/name").json()["name"]
-    >>>
-    ...     def _set_name(self, value):
+    ...         return requests.get(f"https://api.example.com/user/{self.user_id}").json()[parameter]
+    ...
+    ...     def _set_parm(self, value, parameter):
     ...         print("Sending update to API...")
     ...         requests.post(
-    ...             f"https://api.example.com/user/{self.user_id}/name",
-    ...             json={"name": value}
+    ...             f"https://api.example.com/user/{self.user_id}",
+    ...             json={parameter: value}
     ...         )
-    >>>
-    ...     name = RemoteAttrib[str](  # Specify true type if using type hints.
-    ...         get=_get_name,
-    ...         set=_set_name,
-    ...         cache_timeout=10
+    ...
+    ...     first_name = RemoteAttrib[str](  # Specify true type if using type hints.
+    ...         getter=_get_name,
+    ...         setter=_set_name,
+    ...         cache_timeout=10,
+    ...         getter_kwargs={'parameter': 'first_name'},
+    ...         setter_kwargs={'parameter': 'first_name'},
     ...     )
-    ... user = RemoteUser(user_id=42)
+    ...     last_name = RemoteAttrib[str](
+    ...         getter=lambda self: self._get_parm('last_name'),  # getter has self as first arg.
+    ...         setter=lmabda self, value: self._set_parm(value, 'last_name'),  # setter get value as arg.
+    ...         cache_timeout=10,
+    ...     )
+    ...     fullname = RemoteAttrib[str](getter=lambda s: s.first_name+' '+s.last_name)  # compact alternative to property.
+    ...
+    >>> user = RemoteUser(user_id=42)
     >>>
-    ... print(user.name)  # Calls API, caches result
-    ... print(user.name)  # Uses cache
-    ... time.sleep(11)
-    ... print(user.name)   # Refreshes from API
+    >>> print(user.first_name)
+    >>> print(user.last_name)
+    >>> time.sleep(11)
+    >>> print(user.first_name)  # Refreshes from API
     >>> 
-    ... user.name = "Alice"  # Sends update to API
+    >>> user.first_name = "Alice"  # Sends update to API
     """
     def __init__(
             self,
-            get: Optional[Callable[..., Any]] = None,
-            set: Optional[Callable[..., None]] = None,
-            delete: Optional[Callable[..., None]] = None,
+            getter: Optional[Callable[..., Any]] = None,
+            setter: Optional[Callable[..., None]] = None,
+            deleter: Optional[Callable[..., None]] = None,
             cache_timeout: int | float = 0,
             *,
-            get_args: Optional[Tuple[Any]] = None,
-            get_kwargs: Optional[Dict[str, Any]] = None,
-            set_args: Optional[Tuple[Any]] = None,
-            set_kwargs: Optional[Dict[str, Any]] = None,
-            delete_args: Optional[Tuple[Any]] = None,
-            delete_kwargs: Optional[Dict[str, Any]] = None,
+            getter_args: Optional[Tuple[Any]] = None,
+            getter_kwargs: Optional[Dict[str, Any]] = None,
+            setter_args: Optional[Tuple[Any]] = None,
+            setter_kwargs: Optional[Dict[str, Any]] = None,
+            deleter_args: Optional[Tuple[Any]] = None,
+            deleter_kwargs: Optional[Dict[str, Any]] = None,
         ) -> None:
         '''
         A mixin for remote attributes.
 
         Args:
-            get: A function that gets the attribute value. Defaults to None.
-            set: A function that sets the attribute value. Defaults to None.
-            delete: A function that deletes the attribute. Defaults to None.
+            getter: A function that gets the attribute value.
+            setter: A function that sets the attribute value.
+            deleter: A function that deletes the attribute.
             cache_timeout: The time in seconds to cache the attribute value. Defaults to 0.
-            get_args: The arguments to pass to the get function. Defaults to None.
-            get_kwargs: The keyword arguments to pass to the get function. Defaults to None.
-            set_args: The arguments to pass to the set function. Defaults to None.
-            set_kwargs: The keyword arguments to pass to the set function. Defaults to None.
-            delete_args: The arguments to pass to the delete function. Defaults to None.
-            delete_kwargs: The keyword arguments to pass to the delete function. Defaults to None.
+            getter_args: The arguments to pass to the get function.
+            getter_kwargs: The keyword arguments to pass to the get function.
+            setter_args: The arguments to pass to the set function.
+            setter_kwargs: The keyword arguments to pass to the set function.
+            deleter_args: The arguments to pass to the delete function.
+            deleter_kwargs: The keyword arguments to pass to the delete function.
         '''
-        self._get = get
-        self._set = set
-        self._del = delete
-        self._get_args = get_args or ()
-        self._set_args = set_args or ()
-        self._del_args = delete_args or ()
-        self._set_kwargs = set_kwargs or {}
-        self._get_kwargs = get_kwargs or {}
-        self._del_kwargs = delete_kwargs or {}
+        self._getter = getter
+        self._setter = setter
+        self._deleter = deleter
+        self._getter_args = getter_args or ()
+        self._setter_args = setter_args or ()
+        self._deleter_args = deleter_args or ()
+        self._setter_kwargs = setter_kwargs or {}
+        self._getter_kwargs = getter_kwargs or {}
+        self._deleter_kwargs = deleter_kwargs or {}
         self._cache_timeout = cache_timeout
-        self.name: str = ''  # python will fill this
+        self.name: str = ''
 
-    def __ensure_cache__(self, instance: Any) -> None:
+    @staticmethod
+    def __ensure_cache__(instance: Any) -> None:
         if not hasattr(instance, '_remote_attrib_cache'):
-            instance._remote_attrib_cache = {}
+            setattr(instance, '_remote_attrib_cache', {})
 
     def __set_name__(self, owner: Type[Any], name: str) -> None:
         self.name = name
@@ -142,13 +157,13 @@ class RemoteAttrib(Generic[T]):
         if cache_entry and (time.time() - cache_entry[1] <= self._cache_timeout):
             return cache_entry[0]
 
-        if self._get is None:
+        if self._getter is None:
             raise AttributeError(f'No getter for attribute {self.name}.')
 
-        value = self._get(
+        value = self._getter(
             instance,
-            *self._get_args,
-            **self._get_kwargs,
+            *self._getter_args,
+            **self._getter_kwargs,
         )
 
         if self._cache_timeout > 0:
@@ -157,27 +172,27 @@ class RemoteAttrib(Generic[T]):
         return value
 
     def __set__(self, instance: Any, value: Any) -> None:
-        if self._set is None:
+        if self._setter is None:
             raise AttributeError(f'No setter for attribute {self.name}.')
 
         self.__ensure_cache__(instance)
-        self._set(
+        self._setter(
             instance,
             value,
-            *self._set_args,
-            **self._set_kwargs,
+            *self._setter_args,
+            **self._setter_kwargs,
         )
         instance._remote_attrib_cache.pop(self.name, None)
 
     def __delete__(self, instance: Any) -> None:
-        if self._del is None:
+        if self._deleter is None:
             raise AttributeError(
                 f'No deleter for attribute {self.name}.')
 
         self.__ensure_cache__(instance)
-        self._del(
+        self._deleter(
             instance,
-            *self._del_args,
-            **self._del_kwargs,
+            *self._deleter_args,
+            **self._deleter_kwargs,
         )
         instance._remote_attrib_cache.pop(self.name, None)
