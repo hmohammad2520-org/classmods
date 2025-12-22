@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='classmods',
-    version='1.1.0',
+    version='1.2.0',
     license="MIT",
     description='Simple mods for python classes.',
     author='hmohammad2520-org',
