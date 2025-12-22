@@ -91,8 +91,40 @@ class Config:
 ENVMod.save_example('.my_example_path')
 ENVMod.load_dotenv('.my_env')
 ENVMod.sync_env_file('.my_env')
+```
+
+#### Recommended (Type-safe, IDE-friendly) Argument Loading
+
+```python
 config = Config(**ENVMod.load_args(Config.__init__), session=Session())
 ```
+
+**Why this is recommended:**
+
+* Full IDE autocompletion
+* No static type checker errors
+* Explicit and predictable behavior
+* Best for libraries, frameworks, production code
+
+---
+
+#### Convenience Mode (Runtime Magic) Argument Loading
+
+```python
+config = Config(envmod_loader, session=Session()) #type: ignore
+```
+
+**What this does:**
+
+* Automatically loads environment variables
+* Injects them into `__init__`
+* Overrides missing arguments
+
+**Why `# type: ignore` is required:**
+
+* Static analyzers cannot infer runtime argument injection
+* This is intentional and documented behavior
+
 
 ### Method Monitor
 
