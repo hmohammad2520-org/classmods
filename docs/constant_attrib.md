@@ -31,6 +31,8 @@ This is useful when you want:
 ## Basic Usage
 
 ```python
+from classmods import ConstantAttrib
+
 class MyClass:
     VALUE = ConstantAttrib()
 
