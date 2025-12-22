@@ -312,27 +312,35 @@ class ENVMod:
     @classmethod
     def sync_env_file(cls, path: str = ".env") -> None:
         """
-        Merge existing .env file with missing expected keys.
+        Merge existing .env file with missing expected keys
+        while preserving definition order.
         """
-        expected_keys = set(cls._envfile._get_all_keys())
+        expected_keys = cls._envfile._get_all_keys()
 
         existing: Dict[str, str] = {}
         if os.path.exists(path):
             with open(path) as f:
                 for line in f:
                     if '=' in line and not line.strip().startswith('#'):
-                        key, value = line.strip().split('=', 1)
+                        key, value = line.rstrip('\n').split('=', 1)
                         existing[key.strip()] = value.strip()
 
-        new_content = ''
-        all_keys = expected_keys.union(existing.keys())
+        written_keys = set()
+        lines: List[str] = []
 
-        for key in sorted(all_keys):
+        # 1. Write expected keys in definition order
+        for key in expected_keys:
             value = existing.get(key, '')
-            new_content += f"{key}={value}\n"
+            lines.append(f"{key}={value}")
+            written_keys.add(key)
+
+        # 2. Append extra keys that were already in the file
+        for key, value in existing.items():
+            if key not in written_keys:
+                lines.append(f"{key}={value}")
 
         with open(path, 'w') as f:
-            f.write(new_content)
+            f.write("\n".join(lines) + "\n")
 
     @classmethod
     def add(
