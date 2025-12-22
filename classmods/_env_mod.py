@@ -259,11 +259,15 @@ class ENVMod:
             >>> api_service = APIService(**ENVMod.load_args(APIService.__init__))
             >>> db_service = AnotherService(**ENVMod.load_args(AnotherService.connect_db))
 
+            ## Not Recommended ##
+            >>> api_service = APIService(envmod_loader=True) #type: ignore
+
         Notes:
             - Type hints must be provided to ensure proper type casting from environment strings.
             - Default values are automatically handled; required parameters are those without defaults.
             - Environment variable names are generated using the section name and the parameter name
             (e.g., "API_HOST").
+            - You can use the `envmod_loader` as a parameter to magicly load args, but it is not IDE friendly.
         """
         exclude = exclude or []
 
@@ -307,11 +311,14 @@ class ENVMod:
 
             @wraps(func)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
+                if kwargs.pop("envmod_loader", False):
+                    loaded_args = cls.load_args(func)
+                    kwargs = {**loaded_args, **kwargs}
                 return func(*args, **kwargs)
 
             cls._registry[wrapper] = section
-            return wrapper
 
+            return wrapper
         return decorator
 
     @classmethod
