@@ -1,134 +1,228 @@
 import logging, inspect
 from functools import wraps
-from typing import Any, Callable, Literal, Optional, ParamSpec, Tuple, TypeAlias, TypeVar, Union, overload
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Optional,
+    ParamSpec,
+    Tuple,
+    TypeAlias,
+    TypeVar,
+    Union,
+    overload,
+)
 
-LOG_LEVEL: TypeAlias = Literal['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET']
+LOG_LEVEL: TypeAlias = Literal[
+    'CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET'
+]
 
 P = ParamSpec("P")
 R = TypeVar("R")
 T = TypeVar("T")
 
+LogLevelLike: TypeAlias = Union[int, LOG_LEVEL]
+LoggerLike: TypeAlias = Union[str, logging.Logger, None]
+Predicate: TypeAlias = Callable[[dict[str, Any]], bool]
+
+LogwrapParameter: TypeAlias = Union[
+    Tuple[LogLevelLike, str],
+    Tuple[LogLevelLike, str, Predicate],
+    str,
+    bool,
+    None,
+]
+NormalizedParameter: TypeAlias = Optional[
+    Tuple[int, str, Optional[Predicate]]
+]
+
 def logwrap(
-        before: Optional[Tuple[LOG_LEVEL, str]] | str | bool = None,
-        on_exception: Optional[Tuple[LOG_LEVEL, str]] | str | bool = None,
-        after: Optional[Tuple[LOG_LEVEL, str]] | str | bool = None,
+        before: LogwrapParameter = None,
+        on_exception: LogwrapParameter = None,
+        after: LogwrapParameter = None,
+        *,
+        logger: LoggerLike = None,
     ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """
-    A simple dynamic decorator to log function calls using the `logging` module with your current project configurations.
-    Use the `LOG_LEVEL` literal to specify standard log levels.
+    A simple dynamic decorator to log function calls using the standard `logging` module
+    and your project’s existing logging configuration.
+
+    Use the `LOG_LEVEL` literal or integer log levels to specify standard logging severity.
 
     LOG_LEVEL = ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET']
 
-    - The messages are formatted dynamically using templating.
-        - Available variables:
+    Features:
+        - Supports integer log levels (e.g. `logging.DEBUG`)
+        - Custom logger selection
+        - Async function support
+        - Conditional logging via predicates
+
+    Message Formatting:
+        Log messages are dynamically formatted using string templates.
+
+        Available template variables:
             - `func`: Function name
             - `args`: Tuple of positional arguments
             - `kwargs`: Dictionary of keyword arguments
-            - `e`: Exception object (if any)
-            - `result`: Return value of the function
+            - `e`: Exception object (on exception only)
+            - `result`: Return value (after execution only)
 
-    - If `True` is passed to an option, it will use the default log level and message:
-        - Before: DEBUG - Calling {func} - args={args}, kwargs={kwargs}
-        - After: INFO - Function {func} ended. result={result}
-        - On Exception: ERROR - Error in {func}: {e}
+    Default Behavior:
+        If `True` is passed to an option, the following defaults are used:
 
-    - **Warning**: If an option is set to a negative value, logging for that stage will be skipped.
-    - **Warning**: If an invalid log level is provided, no exception will be raised. Instead, the decorator will fall back to the default log level.
+            - Before: DEBUG - Calling {func} - kwargs={kwargs}
+            - After: INFO - Function {func} ended. result={result}
+            - On Exception: ERROR - Error in {func}: {e}
 
-    Args:
-        before: A tuple of log level and message to log *before* the function call, or `True` to use the default.
-        on_exception: A tuple of log level and message to log *on exception*, or `True` to use the default.
-        after: A tuple of log level and message to log *after* the function call, or `True` to use the default.
+    Warnings:
+        - If an option is set to a negative value (e.g. `False`, `None`), logging for that
+        stage is skipped.
+        - If an invalid log level is provided, no exception is raised. The decorator
+        safely falls back to the default log level.
 
-    Examples:
-    >>> @logwrap(before=('INFO', '{func} starting, args={args}, kwargs={kwargs}'), after=('INFO', '{func} ended'))
-    ... def my_func(my_arg, my_kwarg=None):
-    ...     ...
-    ... my_func('hello', my_kwarg=123)
-    Info - my_func starting, args={'my_arg', 123}, kwargs={'my_arg': 'hello','my_kwarg': 123}
-    Info - my_func ended
+    Parameters:
+        before:
+            A tuple of `(level, message)` or `(level, message, predicate)` to log
+            *before* function execution, or `True` to use the default behavior.
 
-    >>> @logwrap(before=True, after=True)
-    ... def my_new_func():
-    ...     ...
-    ... my_new_func()
-    Debug - Calling my_new_func - kwargs={}
-    Info - Function my_new_func ended. result=None
+        on_exception:
+            A tuple of `(level, message)` or `(level, message, predicate)` to log
+            *when an exception occurs*, or `True` to use the default behavior.
 
-    >>> @logwrap(on_exception=True)
-    ... def error_func():
-    ...     raise Exception('My exception msg')
-    ... error_func()
-    Error - Error in error_func: My exception msg
+        after:
+            A tuple of `(level, message)` or `(level, message, predicate)` to log
+            *after* successful function execution, or `True` to use the default behavior.
+
+    For usage examples, advanced configuration, and best practices, see:
+        https://github.com/hmohammad2520-org/classmods/docs/logwrap.md
     """
     def normalize(
-            default_level: LOG_LEVEL,
+            default_level: int,
             default_msg: str,
-            option: Optional[Tuple[LOG_LEVEL, str]] | str | bool | None,
-        ) -> Tuple[LOG_LEVEL, str] | None:
+            option: LogwrapParameter,
+        ) -> NormalizedParameter:
         """
         Normalize the options to specified args and make the input to `Tuple[LOG_LEVEL, str] | None`.
-        Returns None on negative inputs.
-
-        Args:
-            default_level(LOG_LEVEL): default level on str, bool inputs
-            default_msg(str): default msg on bool inputs
-            option(Optional[Tuple[LOG_LEVEL, str]] | str | bool | None): The option to normalize
-        
-        Returns:
-            (Tuple[LOG_LEVEL, str] | None): Normalized output for logging wraper
+        Returns None on negative inputs eg.(false, None).
         """
+        if option is None or option is False:
+            return
+
         if isinstance(option, bool) and option:
-            return (default_level, default_msg)
+            return (default_level, default_msg, None)
 
-        elif isinstance(option, str):
-            return (default_level, option)
+        if isinstance(option, str):
+            return (default_level, option, None)
 
-        elif isinstance(option, tuple):
-            return option
+        if isinstance(option, tuple):
+            if len(option) == 2:
+                level, msg = option
+                predicate = None
 
-    before = normalize('DEBUG', 'Calling {func} - kwargs={kwargs}', before)
-    on_exception = normalize('ERROR', 'Error in {func}: {e}', on_exception)
-    after = normalize('INFO', 'Function {func} ended. result={result}', after)
+            elif len(option) == 3:
+                level, msg, predicate = option
+
+            else:
+                raise IndexError(
+                    f"logwrap tuple must have length 2 or 3, got {len(option)}"
+                )
+
+            if isinstance(level, str):
+                level = getattr(logging, level, default_level)
+
+            if not isinstance(level, int) or not isinstance(msg, str):
+                return None
+
+            return level, msg, predicate
+
+    ## n means normalized
+    before_n = normalize(logging.DEBUG, 'Calling {func} - kwargs={kwargs}', before)
+    on_exception_n = normalize(logging.ERROR, 'Error in {func}: {e}', on_exception)
+    after_n = normalize(logging.INFO, 'Function {func} ended. result={result}', after)
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
         sig = inspect.signature(func)
-        logger = logging.getLogger(func.__module__)
+        is_async = inspect.iscoroutinefunction(func)
 
-        @wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            bound_args = sig.bind(*args, **kwargs)
-            bound_args.apply_defaults()
+        if logger is None:
+            log_obj = logging.getLogger(func.__module__)
 
-            func_name = func.__name__
-            unified_kwargs = dict(bound_args.arguments)
+        elif isinstance(logger, logging.Logger):
+            log_obj = logger
 
-            fmt_context = {
-                'func': func_name,
-                'args': tuple(unified_kwargs.values()),
-                'kwargs': unified_kwargs,
+        elif isinstance(logger, str):
+            log_obj = logging.getLogger(logger)
+
+        else:
+            raise TypeError(f'Logger object must be `None` or `str` or `Logger` not `{logger.__class__}`')
+
+        def build_context(args, kwargs) -> dict[str, Any]:
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+
+            return {
+                'func': func.__name__,
+                'args': tuple(bound.arguments.values()),
+                'kwargs': dict(bound.arguments),
             }
 
-            if before:
-                level, msg = before
-                logger.log(getattr(logging, level, logging.DEBUG), msg.format(**fmt_context))
+        if is_async:
+            @wraps(func)
+            async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+                fmt_context = build_context(args, kwargs)
 
-            try:
-                result = func(*args, **kwargs)
-                fmt_context['result'] = result
-            except Exception as e:
-                if on_exception:
-                    level, msg = on_exception
-                    fmt_context['e'] = e
-                    logger.log(getattr(logging, level, logging.ERROR), msg.format(**fmt_context))
-                raise e
+                if before_n:
+                    level, msg, predicate = before_n
+                    if predicate is None or predicate(fmt_context):
+                        log_obj.log(level, msg.format(**fmt_context))
 
-            if after:
-                level, msg = after
-                logger.log(getattr(logging, level, logging.INFO), msg.format(**fmt_context))
+                try:
+                    result = await func(*args, **kwargs)
+                    fmt_context['result'] = result
+                except Exception as e:
+                    if on_exception_n:
+                        level, msg, predicate = on_exception_n
+                        fmt_context['e'] = e
+                        if predicate is None or predicate(fmt_context):
+                            log_obj.log(level, msg.format(**fmt_context))
+                    raise
 
-            return result
-        return wrapper
+                if after_n:
+                    level, msg, predicate = after_n
+                    if predicate is None or predicate(fmt_context):
+                        log_obj.log(level, msg.format(**fmt_context))
+
+                return result
+            return async_wrapper  # type: ignore
+
+        else:
+            @wraps(func)
+            def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+                fmt_context = build_context(args, kwargs)
+
+                if before_n:
+                    level, msg, predicate = before_n
+                    if predicate is None or predicate(fmt_context):
+                        log_obj.log(level, msg.format(**fmt_context))
+
+                try:
+                    result = func(*args, **kwargs)
+                    fmt_context['result'] = result
+                except Exception as e:
+                    if on_exception_n:
+                        level, msg, predicate = on_exception_n
+                        fmt_context['e'] = e
+                        if predicate is None or predicate(fmt_context):
+                            log_obj.log(level, msg.format(**fmt_context))
+                    raise
+
+                if after_n:
+                    level, msg, predicate = after_n
+                    if predicate is None or predicate(fmt_context):
+                        log_obj.log(level, msg.format(**fmt_context))
+
+                return result
+            return sync_wrapper
     return decorator
 
 @overload

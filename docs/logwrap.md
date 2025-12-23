@@ -8,36 +8,37 @@ A flexible, zero-boilerplate logging decorator built on Python’s standard `log
 * **After** a function returns
 * **When an exception occurs**
 
-All without modifying the function body.
+All **without modifying the function body**.
 
 ---
 
 ## Why `logwrap`?
 
-Logging function behavior usually leads to:
+Logging function behavior often leads to:
 
 * Repetitive boilerplate
 * Inconsistent log formats
-* Hard-to-maintain debug prints
-* Manual try/except logging blocks
+* Scattered `print()` statements
+* Manual `try/except` logging blocks
 
 `logwrap` solves this by providing:
 
 * Declarative logging
 * Centralized formatting
-* Dynamic templating
-* Full compatibility with your existing logging configuration
+* Dynamic message templating
+* Full compatibility with existing `logging` configuration
 
 ---
 
 ## Key Features
 
 * Works with **any function or method**
-* Uses **standard `logging`** (no custom logger required)
-* Supports **dynamic message templating**
-* Fully configurable per stage (before / after / exception)
-* Safe defaults, no crashes on invalid config
-* Zero runtime overhead when disabled
+* Uses **standard `logging`**
+* Supports **sync and async functions**
+* Dynamic message templating
+* Per-stage configuration (before / after / exception)
+* Optional conditional logging via predicates
+* Zero overhead when a stage is disabled
 
 ---
 
@@ -53,7 +54,7 @@ from classmods import logwrap
 
 ## Supported Log Levels
 
-`logwrap` uses the standard logging levels:
+`logwrap` supports all standard logging levels:
 
 ```python
 LOG_LEVEL = [
@@ -66,21 +67,23 @@ LOG_LEVEL = [
 ]
 ```
 
+You may also pass integer levels (e.g. `logging.DEBUG`).
+
 Invalid levels automatically fall back to a safe default.
 
 ---
 
 ## Template Variables
 
-Log messages support **string templating** using the following variables:
+Log messages use Python string formatting with the following variables:
 
-| Variable   | Description                          |
-| ---------- | ------------------------------------ |
-| `{func}`   | Function name                        |
-| `{args}`   | Positional arguments (tuple)         |
-| `{kwargs}` | Keyword arguments (dict)             |
-| `{result}` | Return value (after call only)       |
-| `{e}`      | Exception object (on exception only) |
+| Variable   | Description                             |
+| ---------- | --------------------------------------- |
+| `{func}`   | Function name                           |
+| `{args}`   | Positional arguments (tuple)            |
+| `{kwargs}` | Keyword arguments (dict)                |
+| `{result}` | Return value (after stage only)         |
+| `{e}`      | Exception object (exception stage only) |
 
 ---
 
@@ -146,7 +149,7 @@ def critical_section():
 
 ---
 
-## Using Only One Stage
+## Enabling Only One Stage
 
 You can enable logging for **only one phase**:
 
@@ -160,7 +163,7 @@ def compute():
 
 ## Skipping Logging Explicitly
 
-If an option is set to a **negative value**, logging for that stage is skipped:
+If an option is set to a *negative value*, that stage is skipped:
 
 ```python
 @logwrap(before=False, after=True)
@@ -168,11 +171,16 @@ def silent_start():
     return "Done"
 ```
 
+Supported skip values:
+
+* `False`
+* `None`
+
 ---
 
 ## Default Behaviors
 
-If `True` is passed, the following defaults are used:
+Passing `True` uses the following defaults:
 
 | Stage        | Level | Message                                  |
 | ------------ | ----- | ---------------------------------------- |
@@ -182,19 +190,42 @@ If `True` is passed, the following defaults are used:
 
 ---
 
-## Advanced Example: Debugging Business Logic
+## Conditional Logging (Predicates)
+
+You may provide a predicate function to conditionally log:
 
 ```python
+def only_large_inputs(ctx):
+    return ctx["kwargs"].get("size", 0) > 100
+
 @logwrap(
-    before=('DEBUG', 'Entering {func} with {kwargs}'),
-    after=('DEBUG', '{func} returned {result}'),
-    on_exception=('ERROR', '{func} failed: {e}')
+    before=('DEBUG', 'Large input detected', only_large_inputs)
 )
-def calculate_discount(price: float, percent: float):
-    if percent > 100:
-        raise ValueError("Invalid discount")
-    return price * (1 - percent / 100)
+def process(size: int):
+    ...
 ```
+
+Predicate signature:
+
+```python
+Callable[[dict[str, Any]], bool]
+```
+
+The predicate receives the formatting context.
+
+---
+
+## Async Function Support
+
+`logwrap` automatically detects async functions:
+
+```python
+@logwrap(before=True, after=True)
+async def fetch_data():
+    ...
+```
+
+No configuration changes required.
 
 ---
 
@@ -211,22 +242,41 @@ class Service:
 
 ---
 
+## Custom Logger Selection
+
+You may specify a logger explicitly:
+
+```python
+@logwrap(before=True, logger="myapp.service")
+def run():
+    ...
+```
+
+Accepted values:
+
+* `None` (default: module logger)
+* `str` (logger name)
+* `logging.Logger` instance
+
+---
+
 ## When NOT to Use `logwrap`
 
-* Ultra-hot performance paths (tight loops)
+* Ultra-hot code paths
+* Tight loops
 * Functions called thousands of times per second
 * When logging is globally disabled anyway
 
-In those cases, traditional inline logging may be more efficient.
+In those cases, inline logging may be more efficient.
 
 ---
 
 ## Design Philosophy
 
-* **Explicit is better than implicit**
-* **Logging should not change program behavior**
-* **Configuration over repetition**
-* **Runtime-safe by default**
+* Explicit over implicit
+* Logging must not change program behavior
+* Configuration over repetition
+* Runtime-safe by default
 
 `logwrap` is intentionally:
 
@@ -242,8 +292,8 @@ In those cases, traditional inline logging may be more efficient.
 `logwrap` is ideal when you want:
 
 * Clean function bodies
-* Consistent logs
-* Powerful debugging
+* Consistent, structured logs
+* Powerful debugging hooks
 * Zero boilerplate
 
 It scales from small scripts to large production systems without getting in your way.
