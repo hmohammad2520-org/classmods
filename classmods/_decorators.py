@@ -1,4 +1,5 @@
-import logging, inspect
+from contextlib import contextmanager
+import time, logging, inspect
 from functools import wraps
 from typing import (
     Any,
@@ -7,6 +8,7 @@ from typing import (
     Optional,
     ParamSpec,
     Tuple,
+    Dict,
     TypeAlias,
     TypeVar,
     Union,
@@ -23,25 +25,26 @@ T = TypeVar("T")
 
 LogLevelLike: TypeAlias = Union[int, LOG_LEVEL]
 LoggerLike: TypeAlias = Union[str, logging.Logger, None]
-Predicate: TypeAlias = Callable[[dict[str, Any]], bool]
+Predicate: TypeAlias = Callable[[Dict[str, Any]], bool]
 
-LogwrapParameter: TypeAlias = Union[
+LogwrapStage: TypeAlias = Union[
     Tuple[LogLevelLike, str],
     Tuple[LogLevelLike, str, Predicate],
     str,
     bool,
     None,
 ]
-NormalizedParameter: TypeAlias = Optional[
+NormalizedStage: TypeAlias = Optional[
     Tuple[int, str, Optional[Predicate]]
 ]
 
 def logwrap(
-        before: LogwrapParameter = None,
-        on_exception: LogwrapParameter = None,
-        after: LogwrapParameter = None,
+        before: LogwrapStage = None,
+        on_exception: LogwrapStage = None,
+        after: LogwrapStage = None,
         *,
         logger: LoggerLike = None,
+        timing: LogwrapStage = None,
     ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """
     A simple dynamic decorator to log function calls using the standard `logging` module
@@ -66,20 +69,16 @@ def logwrap(
             - `kwargs`: Dictionary of keyword arguments
             - `e`: Exception object (on exception only)
             - `result`: Return value (after execution only)
+            - `duration`: Time duration of the called function. (time.perf_counter)
 
-    Default Behavior:
-        If `True` is passed to an option, the following defaults are used:
-
-            - Before: DEBUG - Calling {func} - kwargs={kwargs}
-            - After: INFO - Function {func} ended. result={result}
-            - On Exception: ERROR - Error in {func}: {e}
 
     Warnings:
         - If an option is set to a negative value (e.g. `False`, `None`), logging for that
         stage is skipped.
         - If an invalid log level is provided, no exception is raised. The decorator
         safely falls back to the default log level.
-
+        - High usage of `timing` can impact performance.
+        
     Parameters:
         before:
             A tuple of `(level, message)` or `(level, message, predicate)` to log
@@ -99,32 +98,32 @@ def logwrap(
     def normalize(
             default_level: int,
             default_msg: str,
-            option: LogwrapParameter,
-        ) -> NormalizedParameter:
+            stage: LogwrapStage,
+        ) -> NormalizedStage:
         """
         Normalize the options to specified args and make the input to `Tuple[LOG_LEVEL, str] | None`.
         Returns None on negative inputs eg.(false, None).
         """
-        if option is None or option is False:
+        if stage is None or stage is False:
             return
 
-        if isinstance(option, bool) and option:
+        if isinstance(stage, bool) and stage:
             return (default_level, default_msg, None)
 
-        if isinstance(option, str):
-            return (default_level, option, None)
+        if isinstance(stage, str):
+            return (default_level, stage, None)
 
-        if isinstance(option, tuple):
-            if len(option) == 2:
-                level, msg = option
+        if isinstance(stage, tuple):
+            if len(stage) == 2:
+                level, msg = stage
                 predicate = None
 
-            elif len(option) == 3:
-                level, msg, predicate = option
+            elif len(stage) == 3:
+                level, msg, predicate = stage
 
             else:
                 raise IndexError(
-                    f"logwrap tuple must have length 2 or 3, got {len(option)}"
+                    f"logwrap tuple must have length 2 or 3, got {len(stage)}"
                 )
 
             if isinstance(level, str):
@@ -135,14 +134,39 @@ def logwrap(
 
             return level, msg, predicate
 
-    ## n means normalized
-    before_n = normalize(logging.DEBUG, 'Calling {func} - kwargs={kwargs}', before)
-    on_exception_n = normalize(logging.ERROR, 'Error in {func}: {e}', on_exception)
-    after_n = normalize(logging.INFO, 'Function {func} ended. result={result}', after)
+    def build_context(
+            func: Callable,
+            sig: inspect.Signature,
+            args: Tuple,
+            kwargs: Dict[str, Any],
+        ) -> Dict[str, Any]:
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+
+        return {
+            'func': func.__name__,
+            'args': tuple(bound.arguments.values()),
+            'kwargs': dict(bound.arguments),
+        }
+
+    def log_stage(
+            stage: NormalizedStage,
+            log_obj: logging.Logger,
+            context: Dict[str, Any],
+        ) -> None:
+        if stage:
+            level, msg, predicate = stage
+            if predicate is None or predicate(context):
+                log_obj.log(level, msg.format(**context))
+
+
+    nrml_before = normalize(logging.DEBUG, 'Calling {func} - kwargs={kwargs}', before)
+    nrml_on_exception = normalize(logging.ERROR, 'Error in {func}: {e}', on_exception)
+    nrml_after = normalize(logging.INFO, 'Function {func} ended. result={result}', after)
+    nrml_timing = normalize(logging.DEBUG, 'Function {func} executed in {duration:.6f}s', timing)
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
         sig = inspect.signature(func)
-        is_async = inspect.iscoroutinefunction(func)
 
         if logger is None:
             log_obj = logging.getLogger(func.__module__)
@@ -156,73 +180,43 @@ def logwrap(
         else:
             raise TypeError(f'Logger object must be `None` or `str` or `Logger` not `{logger.__class__}`')
 
-        def build_context(args, kwargs) -> dict[str, Any]:
-            bound = sig.bind(*args, **kwargs)
-            bound.apply_defaults()
+        @contextmanager
+        def wrapper_context(args, kwargs):
+            fmt_context = build_context(func, sig, args, kwargs)
+            log_stage(nrml_before, log_obj, fmt_context)
+            start = time.perf_counter() if nrml_timing else None
 
-            return {
-                'func': func.__name__,
-                'args': tuple(bound.arguments.values()),
-                'kwargs': dict(bound.arguments),
-            }
+            try:
+                yield fmt_context
 
-        if is_async:
-            @wraps(func)
-            async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-                fmt_context = build_context(args, kwargs)
+            except Exception as e:
+                fmt_context['e'] = e
+                log_stage(nrml_on_exception, log_obj, fmt_context)
+                raise
 
-                if before_n:
-                    level, msg, predicate = before_n
-                    if predicate is None or predicate(fmt_context):
-                        log_obj.log(level, msg.format(**fmt_context))
+            else:
+                log_stage(nrml_after, log_obj, fmt_context)
 
-                try:
-                    result = await func(*args, **kwargs)
-                    fmt_context['result'] = result
-                except Exception as e:
-                    if on_exception_n:
-                        level, msg, predicate = on_exception_n
-                        fmt_context['e'] = e
-                        if predicate is None or predicate(fmt_context):
-                            log_obj.log(level, msg.format(**fmt_context))
-                    raise
+            finally:
+                if start is not None:
+                    fmt_context['duration'] = time.perf_counter() - start
+                    log_stage(nrml_timing, log_obj, fmt_context)
 
-                if after_n:
-                    level, msg, predicate = after_n
-                    if predicate is None or predicate(fmt_context):
-                        log_obj.log(level, msg.format(**fmt_context))
 
-                return result
-            return async_wrapper  # type: ignore
+        @wraps(func)
+        async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            with wrapper_context(args, kwargs) as fmt_context:
+                fmt_context['result'] = await func(*args, **kwargs)  #type: ignore
+                return fmt_context['result']
 
-        else:
-            @wraps(func)
-            def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-                fmt_context = build_context(args, kwargs)
 
-                if before_n:
-                    level, msg, predicate = before_n
-                    if predicate is None or predicate(fmt_context):
-                        log_obj.log(level, msg.format(**fmt_context))
+        @wraps(func)
+        def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            with wrapper_context(args, kwargs) as fmt_context:
+                fmt_context['result'] = func(*args, **kwargs)
+                return fmt_context['result']
 
-                try:
-                    result = func(*args, **kwargs)
-                    fmt_context['result'] = result
-                except Exception as e:
-                    if on_exception_n:
-                        level, msg, predicate = on_exception_n
-                        fmt_context['e'] = e
-                        if predicate is None or predicate(fmt_context):
-                            log_obj.log(level, msg.format(**fmt_context))
-                    raise
-
-                if after_n:
-                    level, msg, predicate = after_n
-                    if predicate is None or predicate(fmt_context):
-                        log_obj.log(level, msg.format(**fmt_context))
-
-                return result
-            return sync_wrapper
+        return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper  #type: ignore
     return decorator
 
 @overload
@@ -233,6 +227,8 @@ def suppress_errors(fallback: Any) -> Callable[[Callable[..., R]], Callable[...,
     """
     A decorator that suppresses exceptions raised by the wrapped function and returns
     a fallback value instead.
+
+    Supports async functions or methods.
 
     Parameters:
         fallback: Determines what to return when an exception is caught.
@@ -262,12 +258,22 @@ def suppress_errors(fallback: Any) -> Callable[[Callable[..., R]], Callable[...,
     """
     def decorator(func: Callable[..., R]) -> Callable[..., Union[R, Any]]:
         @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Union[R, Any]:
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Union[R, Any]:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
                 if fallback is Exception:
                     return e
                 return fallback
-        return wrapper
+
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Union[R, Any]:
+            try:
+                return await func(*args, **kwargs)  #type: ignore
+            except Exception as e:
+                if fallback is Exception:
+                    return e
+                return fallback
+
+        return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
     return decorator
