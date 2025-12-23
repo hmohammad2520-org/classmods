@@ -260,6 +260,48 @@ Accepted values:
 
 ---
 
+## Timing / Performance Logging
+
+`logwrap` can optionally log the **execution time** of a function.
+
+* Enable it by passing the `timing` argument.
+* Timing logs appear **after function execution** and have their own formatting.
+* Works for both sync and async functions.
+
+### Example
+
+```python
+@logwrap(before=True, after=True, timing=True)
+def compute_heavy(x: int):
+    total = sum(i * i for i in range(x))
+    return total
+
+compute_heavy(10000)
+```
+
+**Logs:**
+
+```text
+DEBUG - Calling compute_heavy - kwargs={'x': 10000}
+INFO  - Function compute_heavy ended. result=333283335000
+DEBUG - Function compute_heavy executed in 0.005432s
+```
+
+* `timing` uses `DEBUG` by default, but you can customize it:
+
+```python
+@logwrap(timing=('INFO', '{func} took {duration:.4f}s'))
+def fast_task():
+    ...
+```
+
+* `{duration}` is automatically available in the template and represents **elapsed time in seconds**.
+* Timing logging is optional. If not enabled (`timing=None`), no timing data is collected.
+* Timing logs are separate from `after` logs to keep **function result logs and performance logs distinct**.
+* Works with both **sync** and **async** functions.
+
+---
+
 ## When NOT to Use `logwrap`
 
 * Ultra-hot code paths
