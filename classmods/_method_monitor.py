@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Tuple, Type, Callable, Optional
 from functools import wraps
-import inspect
+
 
 class MethodMonitor:
     """

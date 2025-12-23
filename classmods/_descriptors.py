@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, Optional, Callable, Self, Tuple, Type, TypeVar, Generic, Union, overload
+from typing import Any, Dict, Optional, Callable, Tuple, Type, TypeVar, Generic, Union, overload
 
 T = TypeVar('T')
 
