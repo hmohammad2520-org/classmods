@@ -6,6 +6,7 @@
 .log/
 .db/
 __cache__/
+__pycache__
 
 # abc Files
 .env
