@@ -145,3 +145,17 @@ def test_logger_selection(caplog):
         test_func()
 
     assert any(r.name == logger_name for r in caplog.records)
+
+
+def test_strip_self(caplog):
+    class TestClass:
+        @logwrap(before=True, strip_self=False)
+        def have(self, test_arg: str):
+            ...
+
+    with caplog.at_level(logging.DEBUG):
+        test_class = TestClass()
+        test_class.have('test')
+
+    messages = [r.message for r in caplog.records]
+    assert any("'self'" in m for m in messages)
