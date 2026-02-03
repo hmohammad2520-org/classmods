@@ -45,6 +45,7 @@ def logwrap(
         *,
         logger: LoggerLike = None,
         timing: LogwrapStage = None,
+        strip_self: bool = True,
     ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """
     A simple dynamic decorator to log function calls using the standard `logging` module
@@ -143,10 +144,17 @@ def logwrap(
         bound = sig.bind(*args, **kwargs)
         bound.apply_defaults()
 
+        arguments = dict(bound.arguments)
+
+        if strip_self and arguments:
+            first = next(iter(arguments))
+            if first in ('self', 'cls'):
+                arguments.pop(first)
+
         return {
             'func': func.__name__,
-            'args': tuple(bound.arguments.values()),
-            'kwargs': dict(bound.arguments),
+            'args': tuple(arguments.values()),
+            'kwargs': arguments,
         }
 
     def log_stage(
