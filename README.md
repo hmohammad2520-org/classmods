@@ -15,6 +15,7 @@ All features are well documented and use a high level of `type_hints` for easy u
 * [`MethodMonitor`](docs/method_monitor.md): A class to monitor method calls of a target class, triggering a handler function after the method is called.
 * [`logwrap`](docs/logwrap.md): A dynamic decorator to log function calls. Uses the `logging` module with your current project configurations.
 * [`suppress_errors`](docs/supress_errors.md): A decorator that suppresses exceptions raised by the wrapped function and returns a fallback value instead.
+* [`SuperWith`](docs/super_with.md): A **powerful context manager utility** that allows you to combine multiple context managers into a single `with` or `async with` statement.
 
 ## Installation
 
