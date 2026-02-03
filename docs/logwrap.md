@@ -302,6 +302,34 @@ def fast_task():
 
 ---
 
+## Removal of `self` and `cls`
+
+- By default, logwrap removes self and cls from logged arguments when decorating instance methods or class methods.
+- This behavior applies only when the first parameter is named self or cls.
+- This keeps logs clean and focused on meaningful parameters.
+- You can disable this behavior by setting strip_self=False.
+
+### Example:
+```python
+class MyList:
+    _list = []
+
+    @logwrap(before=True, strip_self=False)
+    def append(self, value: Any):
+        self._list.append(value)
+
+my_list = MyList()
+my_list.append(1)
+```
+
+**Logs:**
+
+```text
+DEBUG - Calling append - kwargs={'self': <MyList object>, 'value': 1}
+```
+
+---
+
 ## When NOT to Use `logwrap`
 
 * Ultra-hot code paths
